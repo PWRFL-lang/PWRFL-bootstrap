@@ -1,0 +1,58 @@
+﻿using PWR.Compiler.Ast;
+using PWR.Compiler.Semantics;
+
+namespace PWR.Compiler.Steps;
+
+internal class BindExpressions : ScopeSensitiveCompileStep
+{
+	public override void VisitAnnotation(Annotation node)
+	{ }
+
+	// for declarations, skip names and only look at expressions
+	public override void VisitFunctionDeclaration(FunctionDeclaration node)
+	{
+		_scopes.Push(node);
+		try {
+			Visit(node.Body);
+		} finally {
+			_scopes.Pop();
+		}
+	}
+
+	public override void VisitVarDeclaration(VarDeclaration node)
+	{
+		Visit(node.VarType);
+		node.Semantic = new VariableDecl(node);
+		_scopes.Peek().Add(node.Semantic);
+	}
+
+	public override void VisitFunctionCallExpression(FunctionCallExpression node)
+	{
+		base.VisitFunctionCallExpression(node);
+		var target = node.Target.Semantic ?? throw new CompileError(node.Target, $"Unable to look up semantic information for '{node.Target}'");
+		if (!target.SemanticType.HasFlag(SemanticType.Function)) {
+			throw new CompileError(node, $"No function named '{node.Target}' could be found.");
+		}
+		node.Semantic = target;
+	}
+
+	public override void VisitMemberIdentifier(MemberIdentifier node)
+	{
+		Visit(node.ParentExpr);
+		var pSem = node.ParentExpr.Semantic
+			?? throw new CompileError(node.ParentExpr, $"No value named '{node.ParentExpr}' could be found.");
+		var sem = pSem.Type.GetMember(node.Name)
+			?? throw new CompileError(node, $"'{node.ParentExpr}' does not contain a member named '{node.Name}'.");
+		node.Semantic = sem;
+	}
+
+	public override void VisitIdentifier(Identifier node)
+	{
+		var target = Lookup(node.Name);
+		node.Semantic = target.Count switch {
+			0 => throw new CompileError(node, $"No value named '{node.Name}' could be found."),
+			1 => target[0],
+			_ => throw new CompileError(node, $"Multiple elements named '{node.Name}' found in scope."),
+		};
+	}
+}

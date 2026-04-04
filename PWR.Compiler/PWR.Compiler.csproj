@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<Platforms>x64</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+	
+	<ItemGroup>
+		<None Remove="Parser\PwrLexer.g4" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Antlr4 Include="Parser\PwrLexer.g4" />
+	</ItemGroup>
+	
+	<ItemGroup>
+		<Antlr4 Update="Parser\PwrLexer.g4">
+			<Listener>False</Listener>
+			<Visitor>False</Visitor>
+			<Package>PWR.Compiler.Parser</Package>
+			<CustomToolNamespace>PWR.Compiler.Parser</CustomToolNamespace>
+		</Antlr4>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+		<PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" IncludeAssets="build" />
+		<PackageReference Include="libLLVM" Version="20.1.2">
+			<Private>True</Private>
+		</PackageReference>
+		<PackageReference Include="libLLVM.runtime.win-x64" Version="21.1.8" />
+		<PackageReference Include="LLVMSharp" Version="20.1.2" />
+	</ItemGroup>
+
+</Project>
