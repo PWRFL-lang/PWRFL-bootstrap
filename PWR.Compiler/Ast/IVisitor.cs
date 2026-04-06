@@ -12,6 +12,7 @@ public interface IVisitor
 	void VisitSimpleTypeReference(SimpleTypeReference node);
 	void VisitArrayTypeReference(ArrayTypeReference node);
 	void VisitSpanTypeReference(SpanTypeReference node);
+	void VisitRefTypeReference(RefTypeReference node);
 	void VisitSequenceTypeReference(SequenceTypeReference node);
 	void VisitAssignStatement(AssignStatement node);
 	void VisitIfStatement(IfStatement node);
@@ -35,7 +36,9 @@ public interface IVisitor
 	void VisitCastExpression(CastExpression node);
 	void VisitRefExpression(RefExpression node);
 	void VisitIdentifier(Identifier node);
+	void VisitMemberIdentifier(MemberIdentifier node);
 	void VisitCharLiteralExpression(CharLiteralExpression node);
 	void VisitStringLiteralExpression(StringLiteralExpression node);
 	void VisitIntegerLiteralExpression(IntegerLiteralExpression node);
+	void VisitNullLiteralExpression(NullLiteralExpression node);
 }

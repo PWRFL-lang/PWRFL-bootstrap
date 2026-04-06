@@ -20,19 +20,17 @@ public class CompilePipelineP3
 	public CompilePipelineP3(CompileOptions options)
 	{
 		var context = new LLVMContext();
-		_module = context.Handle.CreateModuleWithName("pwr");
+		var name = Path.GetFileNameWithoutExtension(options.OutputFilename);
+		_module = context.Handle.CreateModuleWithName("name");
 		_steps = [new AssignParents(), new SetupStandardLibrary(), new SimpleLowering(),
-			new BindTypes(), new BindFunctionsP3(), new LowerForLoops(),new BindExpressions(),
-			new InferTypesP3(), new AddTypeConversions(), new CodegenP3(context, _module)];
+			new BindTypes(), new BindFunctions(), new LowerForLoops(),new BindExpressions(),
+			new InferTypes(), new AddTypeConversions(), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library)];
 		Types.Populate(context);
 		LLVM.InitializeX86TargetInfo();
 		LLVM.InitializeX86Target();
 		LLVM.InitializeX86TargetMC();
 		LLVM.InitializeX86AsmPrinter();
 		_options = options;
-		if (_options.CompileType == CompileType.Jit) {
-		} else {
-		}
 	}
 
 	private Project RunPipeline(Project tree)
@@ -58,7 +56,7 @@ public class CompilePipelineP3
 
 	private CompileResult BuildResult(Project tree, Stopwatch sw)
 	{
-		if (_options.CompileType != CompileType.Jit) {
+		if (_options.CompileType == CompileType.Jit) {
 			LLVM.LinkInMCJIT();
 			var engine = _module.CreateExecutionEngine();
 			return new JitCompileResult(tree.EntryPoint == default ? null : engine.GetPointerToGlobal<Action>(tree.EntryPoint), sw);
@@ -74,15 +72,18 @@ public class CompilePipelineP3
 			}
 
 			machine.EmitToFile(_module, filename + ".obj", LLVMCodeGenFileType.LLVMObjectFile);
-			var args = $"{filename}.obj /out:{filename} /subsystem:console ";
+			var args = $"{filename}.obj /out:{filename}";
 			if (_options.ProjectType == ProjectType.Executable) {
-				args += " /entry:main";
+				args += " /subsystem:console /entry:main";
+			} else {
+				args += " /subsystem:windows /dll";
 			}
 			if (_options.NoStdLib) {
 				args += " /nodefaultlib";
 			} else {
 				args += " /defaultlib:pwr";
 			}
+			args += " kernel32.lib";
 			var process = Process.Start(
 				new ProcessStartInfo("lld-link", args)
 				{ RedirectStandardError = true, UseShellExecute = false })!;

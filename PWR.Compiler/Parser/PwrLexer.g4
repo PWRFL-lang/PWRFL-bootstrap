@@ -46,6 +46,7 @@ LET : 'let';
 MATCH : 'match';
 MODULE : 'module';
 NEW : 'new';
+NULL : 'null';
 REF : 'ref';
 RETURN : 'return';
 THEN : 'then';

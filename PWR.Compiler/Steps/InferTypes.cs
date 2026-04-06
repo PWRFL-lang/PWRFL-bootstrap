@@ -8,7 +8,7 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Steps;
 
-public class InferTypesP3 : VisitorCompileStep
+public class InferTypes : VisitorCompileStep
 {
 	public override void Visit(Node? node)
 	{
@@ -55,7 +55,7 @@ public class InferTypesP3 : VisitorCompileStep
 	private static void BindDeclType(VarDeclaration decl, IType typ)
 	{
 		if (decl.VarType == null) {
-			((VariableDecl)decl.Semantic!).Type = typ;
+			((ISetTypeSemantic)decl.Semantic!).Type = typ;
 		} else if (decl.VarType.Semantic!.Type != typ) {
 			throw new NotImplementedException();
 		}
@@ -97,6 +97,9 @@ public class InferTypesP3 : VisitorCompileStep
 
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Int32);
+
+	public override void VisitNullLiteralExpression(NullLiteralExpression node)
+		=> node.Semantic = new Literal(node, Types.Ptr);
 
 	public override void VisitUnaryExpression(UnaryExpression node)
 	{
@@ -144,7 +147,11 @@ public class InferTypesP3 : VisitorCompileStep
 		base.VisitIndexingExpression(node);
 		var type = GetType(node.Expr);
 		foreach (var idx in node.Indices) {
-			type = (type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
+			if (idx is SliceExpression) {
+				type = type is SpanType ? type : new SpanType((type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
+			} else {
+				type = (type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
+			}
 		}
 		node.Semantic = new Indexing(node, type);
 	}
@@ -153,21 +160,19 @@ public class InferTypesP3 : VisitorCompileStep
 	{
 		base.VisitFunctionCallExpression(node);
 		if (node.Semantic is MagicFunction mf) {
-			switch (mf.Name) {
-				case "ord":
-					mf.ReturnType.Semantic = InferOrdType(node);
-					break;
-				case "range":
-					mf.ReturnType.Semantic = new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType))));
-					break;
-				case "print":
-					mf.ReturnType.Semantic = new TypeRef(Types.Int32);
-					break;
-				case "StrToPtr":
-					mf.ReturnType.Semantic = new TypeRef(Types.Ptr);
-					break;
-				default:
-					throw new CompileError(node, $"Unknown magic function name: '{mf.Name}'");
+			mf.ReturnType.Semantic = mf.FullName switch {
+				"ord" => InferOrdType(node),
+				"range" => new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType)))),
+				"$print" => new TypeRef(Types.Int32),
+				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
+				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
+			};
+		}
+		var func = node.Semantic as IFunction ?? throw new CompileError(node, $"Function call is not bound to a function");
+		for (int i = 0; i < node.Args.Length; ++i) {
+			var paramType = func.Args[i].ParamType.Semantic?.Type;
+			if (paramType != null && paramType != node.Args[i].Semantic!.Type) {
+				node.Args[i].Annotate("cast", paramType);
 			}
 		}
 	}
@@ -218,5 +223,40 @@ public class InferTypesP3 : VisitorCompileStep
 		base.VisitNewObjExpression(node);
 		var type = GetType(node.ObjectType);
 		node.Semantic = new NewObject(node, type);
+	}
+
+	public override void VisitRefExpression(RefExpression node)
+	{
+		base.VisitRefExpression(node);
+		node.Semantic = new Ref(node);
+	}
+
+	public override void VisitSimpleTypeReference(SimpleTypeReference node) 
+		=> node.Semantic ??= new TypeRef(node.Name switch {
+			"void" => Types.Void,
+			"bool" => Types.Bool,
+			"char" => Types.Char,
+			"int" => Types.Int32,
+			"string" => Types.String,
+			"ptr" => Types.Ptr,
+			_ => throw new NotImplementedException()
+		});
+
+	public override void VisitSpanTypeReference(SpanTypeReference node)
+	{
+		if (node.Semantic == null) {
+			base.VisitSpanTypeReference(node);
+			var baseType = GetType(node.BaseType);
+			node.Semantic = new TypeRef(baseType.MakeSpan());
+		}
+	}
+
+	public override void VisitRefTypeReference(RefTypeReference node)
+	{
+		if (node.Semantic == null) {
+			base.VisitRefTypeReference(node);
+			var baseType = GetType(node.BaseType);
+			node.Semantic = new TypeRef(RefType.Create(baseType));
+		}
 	}
 }

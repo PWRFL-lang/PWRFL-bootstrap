@@ -28,4 +28,14 @@
 	<Using Include="NUnit.Framework" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Code\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Code\pwr.pwrfl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

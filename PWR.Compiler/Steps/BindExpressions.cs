@@ -1,4 +1,6 @@
-﻿using PWR.Compiler.Ast;
+﻿using System;
+
+using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
 
 namespace PWR.Compiler.Steps;
@@ -22,8 +24,13 @@ internal class BindExpressions : ScopeSensitiveCompileStep
 	public override void VisitVarDeclaration(VarDeclaration node)
 	{
 		Visit(node.VarType);
-		node.Semantic = new VariableDecl(node);
-		_scopes.Peek().Add(node.Semantic);
+		var containingScope = _scopes.Peek();
+		node.Semantic = containingScope switch {
+			FunctionDeclaration or CodeFile or Block => new VariableDecl(node),
+			ModuleDeclaration md => new GlobalFieldDecl(node, md),
+			_ => throw new NotImplementedException()
+		};
+		containingScope.Add(node.Semantic);
 	}
 
 	public override void VisitFunctionCallExpression(FunctionCallExpression node)

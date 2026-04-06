@@ -14,19 +14,23 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Steps;
 
-public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, IntPtr puts) : VisitorCompileStep
+public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module, string filename, bool isLibrary) : VisitorCompileStep
 {
-	private LLVMContext _context = context;
-	private LLVMModuleRef _module = module;
+	private readonly LLVMContext _context = context;
+	private readonly LLVMModuleRef _module = module;
+	private readonly string _filename = filename;
+	private readonly bool _isLibrary = isLibrary;
 	private IRBuilder _builder = null!;
-	private Stack<LLVMValueRef> _values = [];
+	private readonly Stack<LLVMValueRef> _values = [];
+	private readonly Stack<string> _namespaces = [];
 	private LLVMValueRef _last;
-	private Dictionary<string, (LLVMTypeRef Type, LLVMValueRef Function)> _functions = [];
-	private Dictionary<string, LLVMValueRef> _locals = [];
-	private Dictionary<string, LLVMTypeRef> _builtinTypes = [];
-	private Dictionary<LLVMTypeRef, LLVMTypeRef> _spanTypes = [];
+	private readonly Dictionary<string, (LLVMTypeRef Type, LLVMValueRef Function)> _functions = [];
+	private readonly Dictionary<string, LLVMValueRef> _locals = [];
+	private readonly Dictionary<string, LLVMValueRef> _globals = [];
+	private readonly Dictionary<string, LLVMTypeRef> _builtinTypes = [];
+	private readonly Dictionary<LLVMTypeRef, LLVMTypeRef> _spanTypes = [];
+	private readonly List<LLVMValueRef> _moduleInits = [];
 	private LLVMTypeRef _mainType;
-	private IntPtr _puts = puts;
 	private LLVMValueRef _currentFunc;
 
 	public override Project Run(Project tree)
@@ -39,32 +43,12 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		return result;
 	}
 
-
-	[DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "puts", ExactSpelling = true)]
-	public static extern int puts([MarshalAs(UnmanagedType.LPUTF8Str)] string value);
 	[LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
 	public static partial IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
 
-	unsafe private void LoadStdlib()
+	private void LoadStdlib()
 	{
 		_mainType = LLVMTypeRef.CreateFunction(_context.Handle.VoidType, []);
-
-		var testFunc = _module.AddFunction("pwr", _mainType);
-		_builder.Handle.PositionAtEnd(LLVMBasicBlockRef.AppendInContext(_module.Context, testFunc, ""));
-		var testStr = _builder.CreateGlobalStringPtr("test").Handle.TypeOf;
-		testFunc.DeleteFunction();
-		testFunc = default;
-
-		if (_puts != default) { 
-			var putsType = LLVMTypeRef.CreateFunction(
-				_context.Handle.Int32Type,
-				[testStr]
-			);
-			_functions.Add("puts", (putsType, _module.AddFunction("puts", putsType)));
-			using var str = new MarshaledString("puts");
-			var putsAddr = _puts == 0 ? NativeLibrary.GetExport(GetModuleHandle("msvcrt.dll"), "puts") : _puts;
-			LLVM.AddSymbol(str, (void*)putsAddr);
-		}
 
 		var callocType = LLVMTypeRef.CreateFunction(
 			LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0),
@@ -99,13 +83,13 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 			[
 				LLVMTypeRef.CreatePointer(_context.Handle.Int8Type, 0), // dest
 				LLVMTypeRef.CreatePointer(_context.Handle.Int8Type, 0), // src
-				_context.Handle.Int64Type,                                            // size
+				_context.Handle.Int64Type,                              // size
 				_context.Handle.Int1Type                                // isVolatile
 			],
 			false
 		);
 		var memcpy = _module.GetNamedFunction("llvm.memcpy.p0.p0.i64");
-		if (memcpy.Handle == IntPtr.Zero)
+		if (memcpy.Handle == default)
 			memcpy = _module.AddFunction("llvm.memcpy.p0.p0.i64", memcpyType);
 		_functions.Add("memcpy", (memcpyType, memcpy));
 	}
@@ -113,12 +97,20 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 	public override void VisitProject(Project node)
 	{
 		base.VisitProject(node);
-		var entryPoints = node.Files.Select(f => f.EntryPoint).Where(p => p.Handle != IntPtr.Zero).ToArray();
+		var entryPoints = node.Files.Select(f => f.EntryPoint).Where(p => p.Handle != default).ToArray();
 		node.EntryPoint = entryPoints.Length switch {
 			0 => default,
 			1 => entryPoints[0],
 			_ => throw new Exception("Project cannot have more than one entry point")
 		};
+		if (_moduleInits.Count > 0) {
+			var func = _module.AddFunction(_filename + "$init$", _mainType);
+			_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+			foreach (var mi in _moduleInits) {
+				_builder.Handle.BuildCall2(_mainType, mi, []);
+			}
+			_builder.Handle.BuildRetVoid();
+		}
 	}
 
 	public override void VisitCodeFile(CodeFile node)
@@ -139,15 +131,45 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 	public override void VisitAnnotation(Annotation node)
 	{ }
 
+	public override void VisitModuleDeclaration(ModuleDeclaration node)
+	{
+		_namespaces.Push(node.Name.ToString());
+		try {
+			base.VisitModuleDeclaration(node);
+			var inits = node.Init.Where(d => !d.Value.IsLiteral).ToArray();
+			if (inits.Length > 0) {
+				BuildModuleInits(node, inits);
+			}
+		} finally {  
+			_namespaces.Pop();
+		}
+	}
+
+	private void BuildModuleInits(ModuleDeclaration node, VarDeclarationStatement[] inits)
+	{
+		var func = _module.AddFunction($"{node.Name}$$init", _mainType);
+		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+		foreach (var init in inits) {
+			Debug.Assert(_values.Count == 0);
+			Visit(init.Value);
+			Debug.Assert(_values.Count == 1);
+			_builder.Handle.BuildStore(_values.Pop(), _globals[string.Join('$', _namespaces.Reverse()) + '$' + init.Decl.Name]);
+		}
+		_builder.Handle.BuildRetVoid();
+		_moduleInits.Add(func);
+		func.Linkage = LLVMLinkage.LLVMInternalLinkage;
+	}
+
 	public override void VisitFunctionDeclaration(FunctionDeclaration node)
 	{
 		var funcType = BuildFuncType(node);
-		var func = _module.AddFunction(node.Name.Name, funcType);
-		_functions.Add(node.Semantic!.FullName, (funcType, func));
 		if (node.Flags.HasFlag(FunctionFlags.Abstract)){
-			BuildAbstractFunction(node, func);
+			BuildAbstractFunction(node, funcType);
 			return;
 		}
+		var name = _namespaces.Count == 0 ? node.Name.Name : string.Join('$', _namespaces.Reverse()) + '$' + node.Name.Name;
+		var func = _module.AddFunction(name, funcType);
+		_functions.Add(name, (funcType, func));
 		_currentFunc = func;
 		_locals.Clear();
 
@@ -171,13 +193,17 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		func.VerifyFunction(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 	}
 
-	private static void BuildAbstractFunction(FunctionDeclaration node, LLVMValueRef func)
+	private void BuildAbstractFunction(FunctionDeclaration node, LLVMTypeRef funcType)
 	{
+		var name = _namespaces.Count == 0 ? node.Name.Name : string.Join('$', _namespaces.Reverse()) + '$' + node.Name.Name;
+		var func = _module.AddFunction(node.Name.Name, funcType);
+
 		var extModule = node.GetAncestors<ModuleDeclaration>().FirstOrDefault(m => m.HasAnnotation("ExternalLibraryName"));
 		if (extModule == null) {
 			throw new NotImplementedException();
 		}
 		func.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLImportStorageClass;
+		_functions.Add(name, (funcType, func));
 	}
 
 	private LLVMTypeRef BuildFuncType(FunctionDeclaration node)
@@ -202,6 +228,7 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		SpanType st => BuildSpanType(LookupType(st.BaseType), st.BaseType.Name),
 		TypeSystem.ArrayType at => BuildSpanType(LookupType(at.BaseType), at.BaseType.Name),
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
+		RefType rt => LLVMTypeRef.CreatePointer(LookupType(rt.BaseType), 0),
 		_ => throw new NotImplementedException()
 	};
 
@@ -216,7 +243,21 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 
 	public override void VisitVarDeclarationStatement(VarDeclarationStatement node)
 	{
-		var varType = LookupType(node.Decl.Semantic!.Type);
+		var sem = node.Decl.Semantic!;
+		var varType = LookupType(sem.Type);
+		if (sem.SemanticType.HasFlag(SemanticType.Field)) {
+			if (sem.SemanticType.HasFlag(SemanticType.Global)) {
+				if (node.VarType == VarUsage.Const) {
+					VisitGlobalConstDeclaration(node.Decl, node.Value, varType, (GlobalFieldDecl)sem);
+				} else {
+					var constInit = node.Value.IsLiteral ? node.Value : null;
+					VisitGlobalFieldDeclaration(node.Decl, constInit, varType, (GlobalFieldDecl)sem);
+				}
+			} else {
+				throw new NotImplementedException();
+			}
+			return;
+		}
 
 		Visit(node.Value);
 		Debug.Assert(_values.Count == 1);
@@ -230,6 +271,34 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		_locals[node.Decl.Name] = alloc;
 		_builder.Handle.PositionAtEnd(currBlock);
 		_builder.Handle.BuildStore(val, alloc);
+	}
+
+	private void VisitGlobalConstDeclaration(VarDeclaration node, Expression value, LLVMTypeRef varType, GlobalFieldDecl sem)
+	{
+		Visit(value);
+		Debug.Assert(_values.Count == 1);
+		var val = _values.Pop();
+		Debug.Assert(val.IsConstant);
+		var field = _module.AddGlobal(varType, sem.FullName);
+		field.Linkage = char.IsUpper(node.Name[0]) ? LLVMLinkage.LLVMExternalLinkage : LLVMLinkage.LLVMInternalLinkage;
+		field.Initializer = val;
+		field.IsGlobalConstant = true;
+		_globals[sem.FullName] = field;
+	}
+
+	private void VisitGlobalFieldDeclaration(VarDeclaration node, Expression? constInit, LLVMTypeRef varType, GlobalFieldDecl sem)
+	{
+		var field = _module.AddGlobal(varType, sem.FullName);
+		field.Linkage = char.IsUpper(node.Name[0]) ? LLVMLinkage.LLVMExternalLinkage : LLVMLinkage.LLVMInternalLinkage;
+		if (constInit != null) {
+			Visit(constInit);
+			Debug.Assert(_values.Count == 1);
+			var val = _values.Pop();
+			field.Initializer = val;
+		} else {
+			field.Initializer = LLVMValueRef.CreateConstNull(varType);
+		}
+		_globals[sem.FullName] = field;
 	}
 
 	public override void VisitIfStatement(IfStatement node)
@@ -387,7 +456,7 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 			return;
 		}
 		if (!_functions.TryGetValue(node.Semantic!.FullName, out var callee)) {
-			throw new CompileError(node, $"GetNamedFunction failed for '{node.Semantic!.FullName}'");
+			throw new CompileError(node, $"GetNamedFunction failed for '{node.Semantic!.Name}'");
 		}
 		var isVoid = node.Target.Semantic!.Type == Types.Void;
 		var result = _builder.Handle.BuildCall2(callee.Type, callee.Function, args, isVoid ? [] : node.Target.Name.AsSpan());
@@ -400,13 +469,25 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 			case "ord":
 				_values.Push(_builder.Handle.BuildZExt(args[0], LookupType(node.Semantic!.Type), "ord"));
 				break;
-			case "$print":
-				var pchar = _builder.Handle.BuildStructGEP2(_builtinTypes["string"], args[0], 1, "strData");
-				var func = _functions["puts"];
-				_values.Push(_builder.Handle.BuildCall2(func.Type, func.Function, [pchar], "puts".AsSpan()));
-				break;
 			case "StrToPtr":
 				_values.Push(_builder.Handle.BuildStructGEP2(_builtinTypes["string"], args[0], 1, "strData"));
+				break;
+			case "span$ToPtr":
+				var parent = ((MemberIdentifier)node.Target).ParentExpr;
+				Visit(parent);
+				var pVal = _values.Pop();
+				_values.Push(_builder.Handle.BuildExtractValue(pVal, 0, "spanData"));
+				break;
+			default:
+				throw new NotImplementedException();
+		}
+	}
+
+	private void VisitMagicPropertyCall(MagicProperty mp, LLVMValueRef parent)
+	{
+		switch (mp.FullName) {
+			case "span$Length":
+				_values.Push(_builder.Handle.BuildExtractValue(parent, 1, "spanLength"));
 				break;
 			default:
 				throw new NotImplementedException();
@@ -525,10 +606,7 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		_values.Push(result);
 	}
 
-	public override void VisitSliceExpression(SliceExpression node)
-	{
-		base.VisitSliceExpression(node);
-	}
+	public override void VisitSliceExpression(SliceExpression node) => throw new UnreachableException("Should be handled in parent node");
 
 	public override void VisitCastExpression(CastExpression node)
 	{
@@ -537,8 +615,39 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		Debug.Assert(_values.Count == count + 1);
 		var expr = _values.Pop();
 		var typ = LookupType(node.Semantic!.Type);
-		var result = _builder.Handle.BuildIntCast(expr, typ, "cast");
+		var result = BuildCast(node.Value.Semantic!.Type, node.Semantic.Type, expr, typ);
+		//var result = _builder.Handle.BuildIntCast(expr, typ, "cast");
 		_values.Push(result);
+	}
+
+	private LLVMValueRef BuildCast(IType type, IType targetType, LLVMValueRef expr, LLVMTypeRef typ)
+	{
+		if (type == targetType) {
+			return expr;
+		}
+		if (type is PrimitiveType && targetType is PrimitiveType) {
+			return _builder.Handle.BuildIntCast(expr, typ, "cast");
+		}
+		if (type is StringType && targetType is SpanType) {
+			var strLenPtr = _builder.Handle.BuildStructGEP2(_builtinTypes["string"], expr, 0, "strLen");
+			var strDataPtr = _builder.Handle.BuildStructGEP2(_builtinTypes["string"], expr, 1, "strData");
+			var span = typ.Undef;
+			span = _builder.Handle.BuildInsertValue(span, _builder.Handle.BuildLoad2(LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0), strDataPtr), 0, "spanData");
+			span = _builder.Handle.BuildInsertValue(span, _builder.Handle.BuildLoad2(_context.Handle.Int32Type, strLenPtr), 1, "spanLen");
+			return span;
+		}
+		throw new NotImplementedException();
+	}
+
+	public override void VisitRefExpression(RefExpression node)
+	{
+		switch (node.Expr.Semantic) {
+			case VariableDecl vd:
+				_values.Push(_locals[vd.Name]);
+				break;
+			default:
+				throw new NotImplementedException();
+		}
 	}
 
 	public override void VisitNewArrayExpression(NewArrayExpression node)
@@ -607,6 +716,14 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		_values.Push(strPtr);
 	}
 
+	public override void VisitMemberIdentifier(MemberIdentifier node)
+	{
+		var count = _values.Count;
+		Visit(node.ParentExpr);
+		Debug.Assert(_values.Count == count + 1);
+		VisitIdentifier(node);
+	}
+
 	public override void VisitIdentifier(Identifier node)
 	{
 		switch (node.Semantic) {
@@ -617,7 +734,15 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 				var ptr = _locals[node.Semantic.Name];
 				_values.Push(_builder.Handle.BuildLoad2(LookupType(node.Semantic.Type), ptr, "var_" + node.Semantic.Name));
 				break;
+			case GlobalFieldDecl gf:
+				ptr = _globals[node.Semantic.FullName];
+				_values.Push(_builder.Handle.BuildLoad2(LookupType(node.Semantic.Type), ptr, "var_" + node.Semantic.Name));
+				break;
 			case Semantics.Module:
+				break;
+			case MagicProperty mp:
+				var parent = _values.Pop();
+				VisitMagicPropertyCall(mp, parent);
 				break;
 			default:
 				throw new CompileError(node, "Unknown Identifier semantic type");
@@ -646,4 +771,7 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> _values.Push(LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, (ulong)node.Value));
+
+	public override void VisitNullLiteralExpression(NullLiteralExpression node)
+		=> _values.Push(LLVMValueRef.CreateConstNull(LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0)));
 }

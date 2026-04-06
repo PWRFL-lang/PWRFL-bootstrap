@@ -1,0 +1,33 @@
+@ExternalLibraryName("kernel32")
+@CallingConvention("win64")
+module Kernel32
+	def abstract GetStdHandle(nStdHandle: int): ptr
+	def abstract WriteFile(hFile: ptr, lpBuffer: ptr, nNumberOfBytesToWrite: int, lpNumberOfBytesWritten: int ref, lpOverlapped: ptr): int
+
+	def WriteFileText(hFile: ptr, buffer: char span)
+		while buffer.Length > 0
+			var count = 0
+			WriteFile(hFile, buffer.ToPtr(), buffer.Length, ref count, null)
+			buffer = buffer[count..]
+		end
+	end
+end
+
+module Console
+	const std_output_handle = -11
+	const newline = "\r\n"
+	let stdout = Kernel32.GetStdHandle(std_output_handle)
+
+	def Print(s: string)
+		Kernel32.WriteFileText(stdout, s)
+	end
+
+	def PrintLn(s: string)
+		Print(s)
+		Print(newline)
+	end
+end
+
+def _DllMainCRTStartup(instance: ptr, reason: int, reserved: ptr): int
+	return 1
+end

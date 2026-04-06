@@ -60,8 +60,8 @@ public class BaseTransformer : ITransformer
 	{
 		var annotations = Visit(node.Annotations) ?? [];
 		var name = (Identifier)VisitIdentifier(node.Name)!;
-		var body = Visit(node.Body)!;
 		var init = Visit(node.Init)!;
+		var body = Visit(node.Body)!;
 		if (annotations == node.Annotations && name == node.Name && body == node.Body && init == node.Init) {
 			return node;
 		}
@@ -127,6 +127,12 @@ public class BaseTransformer : ITransformer
 	{
 		var typ = VisitType(node.BaseType)!;
 		return typ == node.BaseType ? node : new SpanTypeReference(typ);
+	}
+
+	public virtual Node? VisitRefTypeReference(RefTypeReference node)
+	{
+		var typ = VisitType(node.BaseType)!;
+		return typ == node.BaseType ? node : new RefTypeReference(typ);
 	}
 
 	public virtual Node? VisitSequenceTypeReference(SequenceTypeReference node)
@@ -201,11 +207,11 @@ public class BaseTransformer : ITransformer
 
 	public virtual Node? VisitFunctionCallExpression(FunctionCallExpression node)
 	{
-		var target = VisitID(node.Target);
+		var target = VisitID(node.Target)!;
 		var args = Visit(node.Args) ?? [];
 		return (target == node.Target && args == node.Args)
 			? node
-			: new FunctionCallExpression(target!, args);
+			: node.With(target, args);
 	}
 
 	public virtual Node? VisitIndexingExpression(IndexingExpression node)
@@ -287,6 +293,12 @@ public class BaseTransformer : ITransformer
 		return value == node.Value && typ == node.CastType ? node : new CastExpression(value, typ);
 	}
 
+	public virtual Node? VisitRefExpression(RefExpression node)
+	{
+		var expr = VisitExpression(node.Expr)!;
+		return expr == node.Expr ? node : new RefExpression(node.Position, expr);
+	}
+
 	public virtual Node? VisitIdentifier(Identifier node) => node;
 
 	public virtual Node? VisitMemberIdentifier(MemberIdentifier node)
@@ -300,4 +312,6 @@ public class BaseTransformer : ITransformer
 	public virtual Node? VisitStringLiteralExpression(StringLiteralExpression node) => node;
 
 	public virtual Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node) => node;
+
+	public virtual Node? VisitNullLiteralExpression(NullLiteralExpression node) => node;
 }

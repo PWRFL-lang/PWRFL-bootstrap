@@ -23,7 +23,7 @@ public static class Types
 	public static IType Void { get; private set; } = null!;
 	public static IType Bool { get; private set; } = null!;
 	public static IType Int32 { get; private set; } = null!;
-	public static IType String { get; } = new InternalPrimitiveType("string");
+	public static IType String { get; } = new StringType();
 	public static IType Char { get; private set; } = null!;
 	public static IType Ptr { get; private set; } = null!;
 

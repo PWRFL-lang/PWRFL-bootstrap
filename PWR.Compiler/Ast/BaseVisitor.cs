@@ -24,6 +24,7 @@ public class BaseVisitor : IVisitor
 	{
 		Visit(node.Annotations);
 		Visit(node.Name);
+		Visit(node.Init);
 		Visit(node.Body);
 	}
 
@@ -56,6 +57,8 @@ public class BaseVisitor : IVisitor
 	}
 
 	public virtual void VisitSpanTypeReference(SpanTypeReference node) => Visit(node.BaseType);
+
+	public virtual void VisitRefTypeReference(RefTypeReference node) => Visit(node.BaseType);
 
 	public virtual void VisitSequenceTypeReference(SequenceTypeReference node) => Visit(node.BaseType);
 
@@ -166,6 +169,8 @@ public class BaseVisitor : IVisitor
 		Visit(node.CastType);
 	}
 
+	public virtual void VisitRefExpression(RefExpression node) => Visit(node.Expr);
+
 	public virtual void VisitIdentifier(Identifier node)
 	{ }
 
@@ -178,5 +183,8 @@ public class BaseVisitor : IVisitor
 	{ }
 
 	public virtual void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
+	{ }
+
+	public virtual void VisitNullLiteralExpression(NullLiteralExpression node)
 	{ }
 }

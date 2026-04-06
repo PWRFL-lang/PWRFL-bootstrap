@@ -3,7 +3,7 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Semantics;
 
-public class VariableDecl(VarDeclaration decl) : ISemantic
+public class VariableDecl(VarDeclaration decl) : ISemantic, ISetTypeSemantic
 {
 	public VarDeclaration Decl { get; } = decl;
 

@@ -8,9 +8,9 @@ public class SetupStandardLibrary : ICompileStep
 {
 	public Project Run(Project tree)
 	{
-		var p1 = new ParameterDeclaration(new(default, "value"), new SimpleTypeReference(default, "string") { Semantic = new TypeRef(Types.String)});
+		var p1 = new ParameterDeclaration(new(default, "value"), new SimpleTypeReference(default, "string").WithType(Types.String));
 		p1.Semantic = new ParamDef(p1, 0);
-		tree.Add(new MagicFunction("print", "$print", new SimpleTypeReference(default, "int"), p1));
+		tree.Add(new MagicFunction("print", "$print", new SimpleTypeReference(default, "int").WithType(Types.Int32), p1));
 
 		var p2 = new ParameterDeclaration(new(default, "value"), new SimpleTypeReference(default, "ordinal"));
 		p2.Semantic = new ParamDef(p2, 0);
@@ -24,9 +24,9 @@ public class SetupStandardLibrary : ICompileStep
 		p5.Semantic = new ParamDef(p5, 2);
 		tree.Add(new MagicFunction("range", "range", new SequenceTypeReference(new SimpleTypeReference(default, "ordinal")), p3, p4, p5));
 
-		var p6 = new ParameterDeclaration(new(default, "value"), new SimpleTypeReference(default, "string") { Semantic = new TypeRef(Types.String) });
+		var p6 = new ParameterDeclaration(new(default, "value"), new SimpleTypeReference(default, "string").WithType(Types.String));
 		p6.Semantic = new ParamDef(p6, 0);
-		tree.Add(new MagicFunction("StrToPtr", "StrToPtr", new SimpleTypeReference(default, "ptr") { Semantic = new TypeRef(Types.Ptr) }, p6));
+		tree.Add(new MagicFunction("StrToPtr", "StrToPtr", new SimpleTypeReference(default, "ptr").WithType(Types.Ptr), p6));
 
 		return tree;
 	}

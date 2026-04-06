@@ -3,10 +3,12 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Semantics;
 
-public class FunctionDef(FunctionDeclaration decl) : ISemantic, IFunction
+public class FunctionDef(FunctionDeclaration decl, ISemantic? owner = null) : ISemantic, IFunction
 {
 	public FunctionDeclaration Decl { get; } = decl;
+	public ISemantic? Owner { get; } = owner;
 	public string Name => Decl.Name.Name;
+	public string FullName => Owner == null ? Name : $"{Owner.FullName}${Name}";
 
 	public SemanticType SemanticType => SemanticType.Function;
 

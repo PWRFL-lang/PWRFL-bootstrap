@@ -7,6 +7,9 @@ public class FunctionCallExpression(Identifier target, Expression[] args) : Expr
 	public FunctionCallExpression(Identifier target, List<Expression> args) : this(target, args.ToArray())
 	{ }
 
+	public FunctionCallExpression With(Identifier target, Expression[] args)
+		=> new(target, args) { Semantic = Semantic };
+
 	public Identifier Target { get; } = target;
 	public Expression[] Args { get; } = args;
 	public override NodeType Type => NodeType.FunctionCall;

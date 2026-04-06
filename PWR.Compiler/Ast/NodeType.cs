@@ -42,4 +42,5 @@ public enum NodeType
 	MemberIdentifier,
 	RefTypeReference,
 	RefExpression,
+	NullLiteralExpression,
 }
