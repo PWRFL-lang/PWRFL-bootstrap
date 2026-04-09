@@ -42,7 +42,7 @@ public class BindFunctions : ScopeSensitiveCompileStep
 	{
 		base.VisitSpanTypeReference(node);
 		var baseType = GetType(node.BaseType);
-		node.Semantic = new TypeRef(baseType.MakeSpan());
+		node.Semantic = new TypeRef(SpanType.Create(baseType));
 	}
 
 	public override void VisitRefTypeReference(RefTypeReference node)

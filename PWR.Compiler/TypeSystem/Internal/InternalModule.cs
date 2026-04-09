@@ -12,14 +12,4 @@ public class InternalModule(ModuleDeclaration decl) : IType
 	public ModuleDeclaration Decl { get; } = decl;
 
 	ISemantic? IType.GetMember(string name) => Decl.Body.FirstOrDefault(d => d.Semantic?.Name == name)?.Semantic;
-
-	public IType MakeArray()
-	{
-		throw new System.NotImplementedException();
-	}
-
-	public IType MakeSpan()
-	{
-		throw new System.NotImplementedException();
-	}
 }

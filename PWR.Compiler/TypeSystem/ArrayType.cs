@@ -1,18 +1,22 @@
-﻿namespace PWR.Compiler.TypeSystem;
+﻿using System.Collections.Generic;
 
-public class ArrayType(IType baseType) : IType, ICollectionType
+namespace PWR.Compiler.TypeSystem;
+
+public class ArrayType : IType, ICollectionType
 {
-	public IType BaseType { get; } = baseType;
+	public IType BaseType { get; }
 
 	public string Name => BaseType.Name + " array";
 
-	public IType MakeArray()
-	{
-		throw new System.NotImplementedException();
-	}
+	private ArrayType(IType baseType) => BaseType = baseType;
 
-	public IType MakeSpan()
+	private static readonly Dictionary<IType, ArrayType> _cache = [];
+	internal static ArrayType Create(IType baseType)
 	{
-		throw new System.NotImplementedException();
+		if (!_cache.TryGetValue(baseType, out var result)) {
+			result = new ArrayType(baseType);
+			_cache.Add(baseType, result);
+		}
+		return result;
 	}
 }

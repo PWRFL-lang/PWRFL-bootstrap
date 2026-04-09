@@ -5,7 +5,8 @@ using PWR.Compiler.Semantics;
 
 namespace PWR.Compiler.Ast;
 
-public class ModuleDeclaration(Position pos, Identifier name, Declaration[] body, VarDeclarationStatement[] init) : Declaration(pos), IScope
+public class ModuleDeclaration(Position pos, Identifier name, Declaration[] body, VarDeclarationStatement[] init) 
+	: TypeDeclaration(pos), IScope
 {
 	public Identifier Name { get; } = name;
 	public Declaration[] Body { get; } = body;
@@ -19,6 +20,7 @@ public class ModuleDeclaration(Position pos, Identifier name, Declaration[] body
 		=> new(Position, name, body, init) {
 			SymbolTable = SymbolTable,
 			Annotations = annotations,
+			Semantic = Semantic,
 		};
 
 	public override NodeType Type => NodeType.ModuleDeclaration;

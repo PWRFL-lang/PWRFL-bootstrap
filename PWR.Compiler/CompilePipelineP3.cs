@@ -22,9 +22,10 @@ public class CompilePipelineP3
 		var context = new LLVMContext();
 		var name = Path.GetFileNameWithoutExtension(options.OutputFilename);
 		_module = context.Handle.CreateModuleWithName("name");
-		_steps = [new AssignParents(), new SetupStandardLibrary(), new SimpleLowering(),
-			new BindTypes(), new BindFunctions(), new LowerForLoops(),new BindExpressions(),
-			new InferTypes(), new AddTypeConversions(), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library)];
+		_steps = [new AssignParents(), new SetupStandardLibraryP3(options.Imports, options.NoStdLib, options.SearchPath),
+			new SimpleLowering(), new BindTypes(), new BindFunctions(), new LowerForLoops(),new BindExpressions(),
+			new InferTypes(), new AddTypeConversions(),
+			new BuildMetadata(name), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library)];
 		Types.Populate(context);
 		LLVM.InitializeX86TargetInfo();
 		LLVM.InitializeX86Target();

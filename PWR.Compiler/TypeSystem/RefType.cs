@@ -20,14 +20,4 @@ public class RefType : IType
 		}
 		return result;
 	}
-
-	public IType MakeArray()
-	{
-		throw new System.NotImplementedException();
-	}
-
-	public IType MakeSpan()
-	{
-		throw new System.NotImplementedException();
-	}
 }

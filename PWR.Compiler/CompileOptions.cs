@@ -41,6 +41,8 @@ public abstract class CodeSource
 public record CompileOptions(
 	CodeSource[] Files,
 	string OutputFilename,
+	string[] SearchPath,
+	string[]? Imports = null,
 	CompileType CompileType = CompileType.File,
 	ProjectType ProjectType = ProjectType.Executable,
 	bool NoStdLib = false);

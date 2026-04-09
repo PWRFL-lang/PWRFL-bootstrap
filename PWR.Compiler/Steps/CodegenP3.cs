@@ -9,6 +9,7 @@ using LLVMSharp;
 using LLVMSharp.Interop;
 
 using PWR.Compiler.Ast;
+using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;
 using PWR.Compiler.TypeSystem;
 
@@ -38,6 +39,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_builder = new(_context);
 
 		LoadStdlib();
+		WriteMetadata(tree);
 
 		var result = base.Run(tree);
 		return result;
@@ -92,6 +94,36 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (memcpy.Handle == default)
 			memcpy = _module.AddFunction("llvm.memcpy.p0.p0.i64", memcpyType);
 		_functions.Add("memcpy", (memcpyType, memcpy));
+	}
+
+	private void WriteMetadata(Project tree)
+	{
+		var header = tree.MetadataHeader;
+		var metadata = tree.Metadata;
+		var hdrBytes = MemoryMarshal.AsBytes(new Span<MetadataHeader>(ref header));
+		byte[] bytes = [.. hdrBytes, .. metadata];
+		var global = _module.AddGlobal(LLVMTypeRef.CreateArray(_context.Handle.Int8Type, (uint)bytes.Length), "$metadata$");
+		var ptr = (sbyte*)NativeMemory.Alloc((nuint)bytes.Length);
+		try {
+			bytes.AsSpan().CopyTo(new Span<byte>(ptr, bytes.Length));
+			global.Initializer = LLVM.ConstStringInContext(_context.Handle, ptr, (uint)bytes.Length, 1);
+		} finally {
+			NativeMemory.Free(ptr);
+		}
+		global.IsGlobalConstant = true;
+		global.Section = ".PWRMeta";
+
+		bytes = tree.BlobData;
+		global = _module.AddGlobal(LLVMTypeRef.CreateArray(_context.Handle.Int8Type, (uint)bytes.Length), "$metaBlob$");
+		ptr = (sbyte*)NativeMemory.Alloc((nuint)bytes.Length);
+		try {
+			bytes.AsSpan().CopyTo(new Span<byte>(ptr, bytes.Length));
+			global.Initializer = LLVM.ConstStringInContext(_context.Handle, ptr, (uint)bytes.Length, 1);
+		} finally {
+			NativeMemory.Free(ptr);
+		}
+		global.IsGlobalConstant = true;
+		global.Section = ".PWRBlob";
 	}
 
 	public override void VisitProject(Project node)

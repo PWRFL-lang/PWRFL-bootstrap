@@ -1,4 +1,6 @@
-﻿namespace PWR.Compiler.Ast;
+﻿using PWR.Compiler.Semantics;
+
+namespace PWR.Compiler.Ast;
 
 public enum VarUsage
 {
@@ -18,13 +20,15 @@ public class VarDeclaration(Position pos, string name, TypeReference? type) : De
 	public override Node? Accept(ITransformer visitor) => visitor.VisitVarDeclaration(this);
 }
 
-public class VarDeclarationStatement(Position pos, VarDeclaration decl, Expression value, VarUsage varType) : Statement(pos)
+public class VarDeclarationStatement(Position pos, VarDeclaration decl, Expression value, VarUsage varType) : Statement(pos), ISemanticNode
 {
 	public VarDeclaration Decl { get; } = decl;
 	public Expression Value { get; } = value;
 	public VarUsage VarType { get; } = varType;
 
 	public override NodeType Type => NodeType.VarDeclarationStatement;
+
+	public ISemantic? Semantic { get; set; }
 
 	public override void Accept(IVisitor visitor) => visitor.VisitVarDeclarationStatement(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitVarDeclarationStatement(this);

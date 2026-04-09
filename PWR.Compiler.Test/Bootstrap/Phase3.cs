@@ -25,6 +25,7 @@ internal class Phase3
 		var options = new CompileOptions(
 			[CodeSource.FromFile(filename)],
 			Path.Combine(_tempFolder, "pwr.dll"), 
+			[],
 			ProjectType: ProjectType.Library,
 			NoStdLib: true
 		);
@@ -37,7 +38,8 @@ internal class Phase3
 	{
 		var options = new CompileOptions(
 			[CodeSource.FromText(code)],
-			Path.Combine(_tempFolder, "test.exe")
+			Path.Combine(_tempFolder, "test.exe"),
+			[_tempFolder]
 		);
 		var cr = _compiler.Compile(options);
 		if (cr is not BuildCompileResult { Filename: { } filename }) {

@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
-
 using LLVMSharp.Interop;
 
+using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;
+using PWR.Compiler.TypeSystem.External;
 
 namespace PWR.Compiler.Ast;
 
@@ -12,6 +13,10 @@ public class Project(params CodeFile[] files): Node(default), IScope
 	public override NodeType Type => NodeType.Project;
 
 	internal LLVMValueRef EntryPoint { get; set; }
+	internal MetadataHeader MetadataHeader { get; set; }
+	internal byte[] Metadata { get; set; } = null!;
+	internal byte[] BlobData { get; set; } = null!;
+	internal List<ExternalLibrary> Imports { get; } = [];
 
 	public Project With(CodeFile[] files) => new(files) { _globals = this._globals };
 
@@ -28,6 +33,11 @@ public class Project(params CodeFile[] files): Node(default), IScope
 			collector.Add(result);
 			return true;
 		}
-		return false;
+		var found = false;
+		foreach (var imp in Imports) {
+			var iFound = imp.Lookup(name, collector, type);
+			found |= iFound;
+		}
+		return found;
 	}
 }

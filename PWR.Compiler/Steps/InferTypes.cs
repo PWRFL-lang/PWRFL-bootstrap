@@ -148,7 +148,7 @@ public class InferTypes : VisitorCompileStep
 		var type = GetType(node.Expr);
 		foreach (var idx in node.Indices) {
 			if (idx is SliceExpression) {
-				type = type is SpanType ? type : new SpanType((type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
+				type = type is SpanType ? type : SpanType.Create((type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
 			} else {
 				type = (type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
 			}
@@ -215,7 +215,7 @@ public class InferTypes : VisitorCompileStep
 	{
 		base.VisitNewArrayExpression(node);
 		var type = GetType(node.ArrayType);
-		node.Semantic = new NewArray(node, type.MakeArray());
+		node.Semantic = new NewArray(node, ArrayType.Create(type));
 	}
 
 	public override void VisitNewObjExpression(NewObjExpression node)
@@ -247,7 +247,7 @@ public class InferTypes : VisitorCompileStep
 		if (node.Semantic == null) {
 			base.VisitSpanTypeReference(node);
 			var baseType = GetType(node.BaseType);
-			node.Semantic = new TypeRef(baseType.MakeSpan());
+			node.Semantic = new TypeRef(SpanType.Create(baseType));
 		}
 	}
 

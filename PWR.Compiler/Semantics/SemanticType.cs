@@ -20,6 +20,8 @@ public enum SemanticType : uint
 	Indexing   = 0x00001000,
 	Ref        = 0x00002000,
 
+	EntityMask = 0x00FFFFFF,
+
 	External   = 0x01000000,
 	Magic      = 0x02000000,
 	Global     = 0x04000000,

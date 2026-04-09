@@ -10,6 +10,16 @@ internal class BindExpressions : ScopeSensitiveCompileStep
 	public override void VisitAnnotation(Annotation node)
 	{ }
 
+	public override void VisitVarDeclarationStatement(VarDeclarationStatement node)
+	{
+		base.VisitVarDeclarationStatement(node);
+		var ancestor = node.Parent;
+		while (ancestor is not (null or TypeDeclaration or FunctionDeclaration)) {
+			ancestor = ancestor.Parent;
+		}
+		node.Semantic = ancestor is TypeDeclaration ? new Field(node) : node.Decl.Semantic;
+	}
+
 	// for declarations, skip names and only look at expressions
 	public override void VisitFunctionDeclaration(FunctionDeclaration node)
 	{
