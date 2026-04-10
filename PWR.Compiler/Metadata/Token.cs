@@ -1,11 +1,11 @@
 ﻿internal readonly struct Token(byte type, int value)
 {
-	private readonly uint _value = (uint)(value | (type << 24));
+	private readonly int _value = unchecked(value | (type << 24));
 
-	public uint Type => (_value & 0xFF000000) >> 24;
-	public uint Value => _value & 0x00FFFFFF;
+	public int Type => (int)((uint)_value & 0xFF000000) >> 24;
+	public int Value => _value & 0x00FFFFFF;
 
-	public uint AsUInt => _value;
+	public int AsInt => _value;
 
 	public bool IsNull => _value == 0;
 }

@@ -12,6 +12,7 @@ using PWR.Compiler.Ast;
 using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;
 using PWR.Compiler.TypeSystem;
+using PWR.Compiler.TypeSystem.External;
 
 namespace PWR.Compiler.Steps;
 
@@ -39,9 +40,13 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_builder = new(_context);
 
 		LoadStdlib();
+		LoadImports(tree);
 		WriteMetadata(tree);
 
 		var result = base.Run(tree);
+		if (!_isLibrary) {
+			BuildProgramInit(tree.Imports);
+		}
 		return result;
 	}
 
@@ -96,6 +101,23 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_functions.Add("memcpy", (memcpyType, memcpy));
 	}
 
+	private void LoadImports(Project tree)
+	{
+		var importFuncs = tree.Imports.SelectMany(i => i.Types).Cast<ExternalType>().SelectMany(t => t.Members ?? []).OfType<ExternalMethod>();
+		foreach (var func in importFuncs) {
+			ImportFunction(func);
+		}
+	}
+
+	private void ImportFunction(ExternalMethod method)
+	{
+		var type = BuildFuncType(method);
+		var name = method.FullName;
+		var func = _module.AddFunction(name, type);
+		func.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLImportStorageClass;
+		_functions.Add(name, (type, func));
+	}
+
 	private void WriteMetadata(Project tree)
 	{
 		var header = tree.MetadataHeader;
@@ -126,6 +148,21 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		global.Section = ".PWRBlob";
 	}
 
+	private void BuildProgramInit(List<ExternalLibrary> imports)
+	{
+		var funcType = LLVMTypeRef.CreateFunction(_context.Handle.Int32Type, []);
+		var func = _module.AddFunction("runtimeMain", funcType);
+		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+		foreach (var im in imports) {
+			var imInit = _module.AddFunction($"{im.Name}$init$", _mainType);
+			imInit.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLImportStorageClass;
+			_builder.Handle.BuildCall2(_mainType, imInit, []);
+		}
+		// _currentFunc should be Main
+		_builder.Handle.BuildCall2(_mainType, _currentFunc, []);
+		_builder.Handle.BuildRet(LLVM.ConstInt(_context.Handle.Int32Type, 0, 0));
+	}
+
 	public override void VisitProject(Project node)
 	{
 		base.VisitProject(node);
@@ -142,6 +179,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				_builder.Handle.BuildCall2(_mainType, mi, []);
 			}
 			_builder.Handle.BuildRetVoid();
+			func.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLExportStorageClass;
 		}
 	}
 
@@ -223,6 +261,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			}
 		}
 		func.VerifyFunction(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+		if (char.IsUpper(node.Name.Name[0])) {
+			func.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLExportStorageClass;
+		}
 	}
 
 	private void BuildAbstractFunction(FunctionDeclaration node, LLVMTypeRef funcType)
@@ -238,12 +279,14 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_functions.Add(name, (funcType, func));
 	}
 
-	private LLVMTypeRef BuildFuncType(FunctionDeclaration node)
+	private LLVMTypeRef BuildFuncType(IFunction node)
 		=> LLVMTypeRef.CreateFunction(
 			LookupType(node.ReturnType),
-			[.. node.Parameters.Select(p => LookupType(p.ParamType))],
+			[.. node.Args.Select(p => LookupType(p.ParamType))],
 			false
 		);
+
+	private LLVMTypeRef BuildFuncType(FunctionDeclaration node) => BuildFuncType((IFunction)node.Semantic!);
 
 	private LLVMTypeRef BuildSpanType(LLVMTypeRef type, string name)
 	{
@@ -664,7 +707,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			var strLenPtr = _builder.Handle.BuildStructGEP2(_builtinTypes["string"], expr, 0, "strLen");
 			var strDataPtr = _builder.Handle.BuildStructGEP2(_builtinTypes["string"], expr, 1, "strData");
 			var span = typ.Undef;
-			span = _builder.Handle.BuildInsertValue(span, _builder.Handle.BuildLoad2(LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0), strDataPtr), 0, "spanData");
+			span = _builder.Handle.BuildInsertValue(span, strDataPtr, 0, "spanData");
 			span = _builder.Handle.BuildInsertValue(span, _builder.Handle.BuildLoad2(_context.Handle.Int32Type, strLenPtr), 1, "spanLen");
 			return span;
 		}

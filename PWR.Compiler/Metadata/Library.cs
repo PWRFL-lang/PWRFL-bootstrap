@@ -9,7 +9,7 @@ internal enum LibraryFlags : uint
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal record struct Library(
-	uint NameRef,
+	int NameRef,
 	Guid ID,
 	ushort MajorVersion,
 	ushort MinorVersion,

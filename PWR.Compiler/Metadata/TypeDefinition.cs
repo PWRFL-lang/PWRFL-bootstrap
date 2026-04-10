@@ -21,12 +21,12 @@ internal enum TypeFlags: uint
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal record struct TypeDefinition(
-	uint NamespaceRef,
-	uint NameRef,
+	int NamespaceRef,
+	int NameRef,
 	TypeOfType Type,
 	TypeFlags Flags,
 	Token ParentType,
-	uint Metaclass) : IMetadataRow
+	int Metaclass) : IMetadataRow
 {
 	internal readonly string GetName(MetadataContext context) => context.GetString(NameRef);
 	internal readonly string? GetNamespace(MetadataContext context) 

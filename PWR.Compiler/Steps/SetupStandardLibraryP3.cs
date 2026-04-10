@@ -57,7 +57,8 @@ public class SetupStandardLibraryP3(string[]? imports, bool skipStdLib, string[]
 	{
 		var stream = LoadImport(filename, searchPath);
 		using var ctx = new MetadataContext(stream);
-		return new ExternalLibrary(ctx);
+		var name = Path.GetFileNameWithoutExtension(filename);
+		return new ExternalLibrary(ctx, name);
 	}
 
 	private static FileStream LoadImport(string filename, string[] searchPath)

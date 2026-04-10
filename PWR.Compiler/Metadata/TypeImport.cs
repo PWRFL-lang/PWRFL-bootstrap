@@ -3,5 +3,5 @@
 namespace PWR.Compiler.Metadata;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-internal record struct TypeImport(Token Owner, uint NamespaceRef, uint NameRef): IMetadataRow
+internal record struct TypeImport(Token Owner, int NamespaceRef, int NameRef): IMetadataRow
 { }

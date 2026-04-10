@@ -49,7 +49,7 @@ internal class Phase3
 			throw new UnreachableException();
 		}
 
-		var process = Process.Start(new ProcessStartInfo(filename + ".exe")
+		var process = Process.Start(new ProcessStartInfo(filename)
 			{ RedirectStandardOutput = true, UseShellExecute = false })!;
 		process.WaitForExit();
 		Assert.That(process.ExitCode, Is.EqualTo(0));

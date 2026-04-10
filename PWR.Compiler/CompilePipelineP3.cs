@@ -72,12 +72,12 @@ public class CompilePipelineP3
 				filename += _options.ProjectType == ProjectType.Executable ? ".exe" : ".dll";
 			}
 
-			machine.EmitToFile(_module, filename + ".obj", LLVMCodeGenFileType.LLVMObjectFile);
-			var args = $"{filename}.obj /out:{filename}";
+			machine.EmitToFile(_module, bareFilename + ".obj", LLVMCodeGenFileType.LLVMObjectFile);
+			var args = $"{bareFilename}.obj /out:{filename}";
 			if (_options.ProjectType == ProjectType.Executable) {
-				args += " /subsystem:console /entry:main";
+				args += " /subsystem:console /entry:runtimeMain";
 			} else {
-				args += " /subsystem:windows /dll";
+				args += $" /subsystem:windows /dll /implib:{bareFilename}.lib";
 			}
 			if (_options.NoStdLib) {
 				args += " /nodefaultlib";

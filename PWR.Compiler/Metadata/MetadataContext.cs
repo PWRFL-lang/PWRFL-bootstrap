@@ -28,8 +28,8 @@ internal class MetadataContext : IDisposable
 	public List<MethodDefinition> MethodDefinitionTable { get; } = [];
 	public List<ParamDefinition> ParamDefinitionTable { get; } = [];
 
-	private readonly Dictionary<string, uint> _stringCache = [];
-	private readonly Dictionary<byte[], uint> _blobCache = [];
+	private readonly Dictionary<string, int> _stringCache = [];
+	private readonly Dictionary<byte[], int> _blobCache = [];
 	private readonly BinaryWriter _blobWriter;
 	private readonly Dictionary<ISemantic, Token> _tokenCache = [];
 
@@ -51,20 +51,20 @@ internal class MetadataContext : IDisposable
 		Deserialize(meta);
 	}
 
-	public uint AddString(string value)
+	public int AddString(string value)
 	{
 		if (!_stringCache.TryGetValue(value, out var result)) {
-			result = (uint)_blobWriter.BaseStream.Position;
+			result = (int)_blobWriter.BaseStream.Position;
 			_stringCache.Add(value, result);
 			_blobWriter.Write(value);
 		}
 		return result;
 	}
 
-	public uint AddBlob(byte[] value)
+	public int AddBlob(byte[] value)
 	{
 		if (!_blobCache.TryGetValue(value, out var result)) {
-			result = (uint)_blobWriter.BaseStream.Position;
+			result = (int)_blobWriter.BaseStream.Position;
 			_blobCache.Add(value, result);
 			_blobWriter.Write7BitEncodedInt(value.Length);
 			_blobWriter.Write(value);
@@ -72,16 +72,16 @@ internal class MetadataContext : IDisposable
 		return result;
 	}
 
-	internal string GetString(uint pos)
+	internal string GetString(int pos)
 	{
-		var bytes = ((MemoryStream)_blobWriter.BaseStream).GetBuffer().AsSpan((int)pos);
+		var bytes = ((MemoryStream)_blobWriter.BaseStream).GetBuffer().AsSpan(pos);
 		var reader = new SpanReader(bytes);
 		return reader.ReadString();
 	}
 
-	internal byte[] GetBlob(uint pos) 
+	internal byte[] GetBlob(int pos) 
 	{
-		var bytes = ((MemoryStream)_blobWriter.BaseStream).GetBuffer().AsSpan((int)pos);
+		var bytes = ((MemoryStream)_blobWriter.BaseStream).GetBuffer().AsSpan(pos);
 		var reader = new SpanReader(bytes);
 		var len = reader.Read7BitEncodedInt();
 		return reader.ReadBytes(len);
@@ -180,7 +180,7 @@ internal class MetadataContext : IDisposable
 			_tokenCache.TryGetValue(parent, out var parentTok)
 			&& parentTok.Type == METHOD_DEF_ID
 			&& parentTok.Value == MethodDefinitionTable.Count - 1);
-		var param = new ParamDefinition(AddString(parameter.Name), (ushort)parameter.Position, default);
+		var param = new ParamDefinition(parentTok.Value, AddString(parameter.Name), (ushort)parameter.Position, default);
 		var token = new Token(PARAM_DEF_ID, ParamDefinitionTable.Count);
 		ParamDefinitionTable.Add(param);
 		_tokenCache.Add(parameter, token);

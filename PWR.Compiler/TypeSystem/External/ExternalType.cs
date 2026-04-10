@@ -11,35 +11,43 @@ internal abstract class ExternalType(string? ns, string name, IType? parent, Met
 {
 	private readonly MetadataContext _context = context;
 	protected readonly int _rowIdx = rowIdx;
-	private ISemantic[]? _members;
 
 	protected abstract Token IdToken { get; }
 
 	public string? Namespace { get; } = ns;
 	public string Name { get; } = name;
 	public IType? Parent { get; } = parent;
+	internal ISemantic[]? Members { get; private set; }
 
 	ISemantic? IType.GetMember(string name)
 	{
-		_members ??= LoadMembers();
-		return _members.FirstOrDefault(m => m.Name == name);
+		Members ??= LoadMembers();
+		return Members.FirstOrDefault(m => m.Name == name);
 	}
 
 	private ISemantic[] LoadMembers()
 	{
 		var result = new List<ISemantic>();
-		var tok = this.IdToken.AsUInt;
-		var idx = _context.FieldDefinitionTable.BinarySearchFirst(f => f.OwnerRef.AsUInt, tok);
+		var tok = this.IdToken.AsInt;
+		var idx = _context.FieldDefinitionTable.BinarySearchFirst(f => f.OwnerRef.AsInt, tok);
 		if (idx >= 0) {
-			foreach (var field in _context.FieldDefinitionTable.Skip(idx).TakeWhile(f => f.OwnerRef.AsUInt == tok)) {
+			foreach (var field in _context.FieldDefinitionTable.Skip(idx).TakeWhile(f => f.OwnerRef.AsInt == tok)) {
 				result.Add(BuildField(field, this));
 			}
 		}
 
 		idx = _context.MethodDefinitionTable.BinarySearchFirst(f => (int)f.OwnerRef, _rowIdx);
 		if (idx >= 0) {
-			foreach (var field in _context.MethodDefinitionTable.Skip(idx).TakeWhile(f => f.OwnerRef == _rowIdx)) {
-				result.Add(BuildMethod(field, this));
+			for (int i = idx; i < _context.MethodDefinitionTable.Count; ++i) {
+				var field = _context.MethodDefinitionTable[i];
+				if (field.OwnerRef != _rowIdx) {
+					break;
+				}
+				var paramIdx = _context.ParamDefinitionTable.BinarySearchFirst(p => p.OwnerRef, i);
+				var names = _context.ParamDefinitionTable.Skip(paramIdx)
+					.TakeWhile(p => p.OwnerRef == (uint)i)
+					.Select(p => p.GetName(_context));
+				result.Add(BuildMethod(field, names, this));
 			}
 		}
 		return [.. result];
@@ -53,11 +61,11 @@ internal abstract class ExternalType(string? ns, string name, IType? parent, Met
 		return new ExternalField(name, type, owner);
 	}
 
-	private ExternalMethod BuildMethod(MethodDefinition func, IType owner)
+	private ExternalMethod BuildMethod(MethodDefinition func, IEnumerable<string> paramNames, IType owner)
 	{
 		var name = _context.GetString(func.NameRef);
 		var sigBlob = _context.GetBlob(func.MethodSigRef);
 		var sig = Signatures.ReadFunc(sigBlob, _context);
-		return new ExternalMethod(name, sig, owner);
+		return new ExternalMethod(name, sig, [.. paramNames], owner);
 	}
 }

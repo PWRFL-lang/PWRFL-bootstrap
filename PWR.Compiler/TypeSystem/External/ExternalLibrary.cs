@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;
 
 namespace PWR.Compiler.TypeSystem.External;
 
-internal class ExternalLibrary(MetadataContext context) : IScope
+internal class ExternalLibrary(MetadataContext context, string name) : IScope
 {
+	public string Name { get; } = name;
 	public IType[] Types { get; } = ReadContext(context);
 
 	private static IType[] ReadContext(MetadataContext context)
