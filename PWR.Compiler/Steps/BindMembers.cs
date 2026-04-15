@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 using PWR.Compiler.Ast;
@@ -69,8 +70,14 @@ public class BindMembers : ScopeSensitiveCompileStep
 			"int" => Types.Int32,
 			"string" => Types.String,
 			"ptr" => Types.Ptr,
-			_ => throw new NotImplementedException()
+			_ => CheckType(Lookup(node.Name, SemanticType.Type), node)
 		});
+
+	private static IType CheckType(List<ISemantic> list, SimpleTypeReference node) => list.Count switch {
+		0 => throw new CompileError(node, $"No type named '{node.Name}' could be found."),
+		1 => list[0].Type,
+		_ => throw new CompileError(node, $"Multiple types named '{node.Name}' found in scope."),
+	};
 
 	public override void VisitSpanTypeReference(SpanTypeReference node)
 	{
