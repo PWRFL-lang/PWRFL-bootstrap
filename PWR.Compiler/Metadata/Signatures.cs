@@ -144,6 +144,10 @@ internal static class Signatures
 				writer.Write((byte)SigElement.Ref);
 				WriteType(rt.BaseType, ref writer, context);
 				break;
+			case ICompositeType ct2:
+				writer.Write((byte)SigElement.Struct);
+				writer.Write(context.LookupType(ct2).AsInt);
+				break;
 			default:
 				throw new NotImplementedException();
 		}

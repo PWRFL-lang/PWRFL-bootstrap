@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 
 using PWR.Compiler.Helpers;
 using PWR.Compiler.Semantics;
+using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Metadata;
 
@@ -33,6 +34,7 @@ internal class MetadataContext : IDisposable
 	private readonly Dictionary<byte[], int> _blobCache = [];
 	private readonly BinaryWriter _blobWriter;
 	private readonly Dictionary<ISemantic, Token> _tokenCache = [];
+	private readonly Dictionary<IType, Token> _typeCache = [];
 
 	public MetadataContext()
 	{
@@ -152,6 +154,9 @@ internal class MetadataContext : IDisposable
 		var token = new Token(TYPE_DEF_ID, TypeDefinitionTable.Count);
 		TypeDefinitionTable.Add(type);
 		_tokenCache.Add(typ, token);
+		if (typeType != TypeOfType.Module) {
+			_typeCache.Add(typ.Type, token);
+		}
 	}
 
 	internal void AddField(ISemantic field, ISemantic? parent)
@@ -194,6 +199,7 @@ internal class MetadataContext : IDisposable
 
 	private TypeOfType GetTypeType(ISemantic sem) => sem switch {
 		Module => TypeOfType.Module,
+		StructDecl => TypeOfType.Value,
 		_ => throw new NotImplementedException()
 	};
 
@@ -203,6 +209,14 @@ internal class MetadataContext : IDisposable
 			return default;
 		}
 		if (_tokenCache.TryGetValue(sem, out var result)) {
+			return result;
+		}
+		throw new NotImplementedException();
+	}
+
+	public Token LookupType(IType typ)
+	{
+		if (_typeCache.TryGetValue(typ, out var result)) {
 			return result;
 		}
 		throw new NotImplementedException();

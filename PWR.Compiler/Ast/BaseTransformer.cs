@@ -334,4 +334,6 @@ public class BaseTransformer : ITransformer
 	public virtual Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node) => node;
 
 	public virtual Node? VisitNullLiteralExpression(NullLiteralExpression node) => node;
+
+	public virtual Node? VisitSelfLiteralExpression(SelfLiteralExpression node) => node;
 }

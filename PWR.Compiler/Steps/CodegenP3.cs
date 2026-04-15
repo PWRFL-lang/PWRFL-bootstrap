@@ -946,4 +946,6 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 
 	public override void VisitNullLiteralExpression(NullLiteralExpression node)
 		=> _values.Push(LLVMValueRef.CreateConstNull(LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0)));
+
+	public override void VisitSelfLiteralExpression(SelfLiteralExpression node) => _values.Push(_currentFunc.FirstParam);
 }

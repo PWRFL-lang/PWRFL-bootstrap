@@ -22,6 +22,13 @@ internal class BuildMetadata(string name) : ScopeSensitiveCompileStep
 		base.VisitModuleDeclaration(node);
 	}
 
+	public override void VisitStructDeclaration(StructDeclaration node)
+	{
+		var parent = _scopes.Peek();
+		_context.AddType(node.Semantic!, (parent as ISemanticNode)?.Semantic);
+		base.VisitStructDeclaration(node);
+	}
+
 	public override void VisitVarDeclarationStatement(VarDeclarationStatement node)
 	{
 		var parent = _scopes.Peek();

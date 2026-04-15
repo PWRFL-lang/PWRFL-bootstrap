@@ -43,4 +43,5 @@ public interface IVisitor
 	void VisitStringLiteralExpression(StringLiteralExpression node);
 	void VisitIntegerLiteralExpression(IntegerLiteralExpression node);
 	void VisitNullLiteralExpression(NullLiteralExpression node);
+	void VisitSelfLiteralExpression(SelfLiteralExpression node);
 }

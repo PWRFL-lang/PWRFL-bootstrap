@@ -44,4 +44,5 @@ public enum NodeType
 	RefExpression,
 	NullLiteralExpression,
 	StructDeclaration,
+	SelfLiteral,
 }

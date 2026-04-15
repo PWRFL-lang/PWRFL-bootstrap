@@ -200,4 +200,7 @@ public class BaseVisitor : IVisitor
 
 	public virtual void VisitNullLiteralExpression(NullLiteralExpression node)
 	{ }
+
+	public virtual void VisitSelfLiteralExpression(SelfLiteralExpression node)
+	{ }
 }

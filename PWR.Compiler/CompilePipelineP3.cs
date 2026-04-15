@@ -24,7 +24,7 @@ public class CompilePipelineP3
 		_module = context.Handle.CreateModuleWithName("name");
 		_steps = [new AssignParents(), new SetupStandardLibraryP3(options.Imports, options.NoStdLib, options.SearchPath),
 			new SimpleLowering(), new BindTypes(), new BindMembers(), new LowerForLoops(), new BindExpressionsP3(),
-			new AddTypeConversions(),
+			new AddTypeConversions(), new InsertImplicitSelf(),
 			new BuildMetadata(name), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library)];
 		Types.Populate(context);
 		LLVM.InitializeX86TargetInfo();

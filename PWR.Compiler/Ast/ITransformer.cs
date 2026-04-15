@@ -43,4 +43,5 @@ public interface ITransformer
 	Node? VisitStringLiteralExpression(StringLiteralExpression node);
 	Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node);
 	Node? VisitNullLiteralExpression(NullLiteralExpression node);
+	Node? VisitSelfLiteralExpression(SelfLiteralExpression node);
 }

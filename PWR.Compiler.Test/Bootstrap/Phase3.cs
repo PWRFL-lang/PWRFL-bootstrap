@@ -71,4 +71,20 @@ internal class Phase3
 		Console.Print((p.X + p.Y).ToString())
 		""",
 		"3");
+
+	[Test]
+	public void Structs2() => RunTest("""
+		struct Point
+			X: int
+			Y: int
+
+			def Sum(): int
+				return X + Y
+			end
+		end
+
+		var p = Point(1, 2)
+		Console.Print(p.Sum().ToString())
+		""",
+		"3");
 }

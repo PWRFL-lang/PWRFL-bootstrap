@@ -19,9 +19,9 @@ public class Project(params CodeFile[] files): Node(default), IScope
 	internal MetadataHeader MetadataHeader { get; set; }
 	internal byte[] Metadata { get; set; } = null!;
 	internal byte[] BlobData { get; set; } = null!;
-	internal List<ExternalLibrary> Imports { get; } = [];
+	internal List<ExternalLibrary> Imports { get; init; } = [];
 
-	public Project With(CodeFile[] files) => new(files) { _globals = this._globals };
+	public Project With(CodeFile[] files) => new(files) { _globals = this._globals, Imports = this.Imports };
 
 	public override void Accept(IVisitor visitor) => visitor.VisitProject(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitProject(this);

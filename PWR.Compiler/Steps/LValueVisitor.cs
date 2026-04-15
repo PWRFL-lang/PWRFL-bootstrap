@@ -149,4 +149,6 @@ internal class LValueVisitor(
 	public void VisitVarDeclarationStatement(VarDeclarationStatement node) => throw new NotImplementedException();
 
 	public void VisitWhileStatement(WhileStatement node) => throw new NotImplementedException();
+
+	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => throw new NotImplementedException();
 }

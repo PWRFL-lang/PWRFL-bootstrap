@@ -3,7 +3,7 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Semantics;
 
-public class FieldDecl(FieldDeclaration node, TypeDeclaration td, int index) : ISemantic
+public class FieldDecl(FieldDeclaration node, TypeDeclaration td, int index) : IMemberSemantic
 {
 	public FieldDeclaration Node { get; } = node;
 	public TypeDeclaration ParentType { get; } = td;
@@ -15,6 +15,8 @@ public class FieldDecl(FieldDeclaration node, TypeDeclaration td, int index) : I
 	public SemanticType SemanticType => SemanticType.Field;
 
 	public IType Type => Node.Decl.VarType!.Semantic!.Type ?? Node.Value?.Semantic?.Type ?? throw new CompileError(Node, "Internal compiler error: No type bound for this field");
+	
+	IType IMemberSemantic.ParentType => this.ParentType.Semantic!.Type;
 
 	public bool IsStatic => Index < 0;
 }

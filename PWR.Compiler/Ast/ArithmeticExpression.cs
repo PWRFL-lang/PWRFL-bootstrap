@@ -1,4 +1,6 @@
-﻿namespace PWR.Compiler.Ast;
+﻿using System.Diagnostics;
+
+namespace PWR.Compiler.Ast;
 
 public enum ArithmeticOperator
 {
@@ -30,5 +32,25 @@ public class ArithmeticExpression(Expression l, Expression r, ArithmeticOperator
 	public override void Accept(IVisitor visitor) => visitor.VisitArithmeticExpression(this);
 
 	public override Node? Accept(ITransformer visitor) => visitor.VisitArithmeticExpression(this);
+
+	public override string ToString()
+	{
+		var oper = Operator switch {
+			ArithmeticOperator.Assign => "=",
+			ArithmeticOperator.Add => "+",
+			ArithmeticOperator.Subtract => "-",
+			ArithmeticOperator.Multiply => "*",
+			ArithmeticOperator.IDivide => "//",
+			ArithmeticOperator.Divide => "/",
+			ArithmeticOperator.Modulus => "%",
+			ArithmeticOperator.InPlaceAdd => "+=",
+			ArithmeticOperator.InPlaceSub => "-=",
+			ArithmeticOperator.InPlaceMul => "*=",
+			ArithmeticOperator.InPlaceDiv => "/=",
+			ArithmeticOperator.InPlaceIDiv => "//=",
+			_ => throw new UnreachableException()
+		};
+		return $"({Left} {oper} {Right})";
+	}
 }
 

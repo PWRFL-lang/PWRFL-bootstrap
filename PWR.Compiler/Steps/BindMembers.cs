@@ -32,8 +32,8 @@ public class BindMembers : ScopeSensitiveCompileStep
 			_scopes.Pop(); 
 		}
 		var containingScope = _scopes.Peek();
-		var owner = containingScope is ModuleDeclaration ? ((Declaration)containingScope).Semantic : null;
-		var hasSelf = containingScope is FunctionDeclaration
+		var owner = containingScope is TypeDeclaration ? ((Declaration)containingScope).Semantic : null;
+		var hasSelf = containingScope is StructDeclaration
 			|| (containingScope is ModuleDeclaration { ExtendType: { } } && node.Parameters is [{ Name.Name: "self" }, ..]);
 		node.Semantic = new FunctionDef(node, hasSelf, owner);
 		_scopes.Peek().Add(node.Semantic);
