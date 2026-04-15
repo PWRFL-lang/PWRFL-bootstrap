@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
@@ -16,6 +17,17 @@ public abstract class ScopeSensitiveCompileStep : VisitorCompileStep
 		var result = new List<ISemantic>();
 		foreach (var scope in _scopes) {
 			if (scope.Lookup(name, result, type)) {
+				break;
+			}
+		}
+		return result;
+	}
+
+	protected List<ISemantic> Scan(Func<ISemantic, bool> predicate, SemanticType type)
+	{
+		var result = new List<ISemantic>();
+		foreach (var scope in _scopes) {
+			if (scope.Scan(predicate, result, type)) {
 				break;
 			}
 		}
@@ -47,6 +59,16 @@ public abstract class ScopeSensitiveCompileStep : VisitorCompileStep
 		_scopes.Push(node);
 		try {
 			base.VisitModuleDeclaration(node);
+		} finally {
+			_scopes.Pop(); 
+		}
+	}
+
+	public override void VisitStructDeclaration(StructDeclaration node)
+	{
+		_scopes.Push(node);
+		try {
+			base.VisitStructDeclaration(node);
 		} finally {
 			_scopes.Pop(); 
 		}

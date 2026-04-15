@@ -8,7 +8,7 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Steps;
 
-public class InferTypes : VisitorCompileStep
+internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 {
 	public override void Visit(Node? node)
 	{
@@ -28,7 +28,6 @@ public class InferTypes : VisitorCompileStep
 			}
 		}
 	}
-
 	private static IType GetType(ISemanticNode node) => node.Semantic?.Type ?? throw new CompileError((Node)node, $"No type bound for node.");
 
 	private static IType MergeTypes(IType lType, IType rType)
@@ -67,7 +66,90 @@ public class InferTypes : VisitorCompileStep
 	public override void VisitVarDeclarationStatement(VarDeclarationStatement node)
 	{
 		base.VisitVarDeclarationStatement(node);
+		var ancestor = node.Parent;
+		while (ancestor is not (null or TypeDeclaration or FunctionDeclaration)) {
+			ancestor = ancestor.Parent;
+		}
+		node.Semantic ??= ancestor is TypeDeclaration ? new Field(node) : node.Decl.Semantic;
 		BindDeclType(node.Decl, GetType(node.Value));
+	}
+
+	// for declarations, skip names and only look at expressions
+	public override void VisitFunctionDeclaration(FunctionDeclaration node)
+	{
+		_scopes.Push(node);
+		try {
+			Visit(node.Body);
+		} finally {
+			_scopes.Pop();
+		}
+	}
+
+	public override void VisitVarDeclaration(VarDeclaration node)
+	{
+		if (node.Semantic == null) {
+			Visit(node.VarType);
+			var containingScope = _scopes.Peek();
+			node.Semantic = containingScope switch {
+				FunctionDeclaration or CodeFile or Block => new VariableDecl(node),
+				_ => throw new NotImplementedException()
+			};
+			containingScope.Add(node.Semantic);
+		}
+	}
+
+	public override void VisitFunctionCallExpression(FunctionCallExpression node)
+	{
+		base.VisitFunctionCallExpression(node);
+		var target = node.Target.Semantic ?? throw new CompileError(node.Target, $"Unable to look up semantic information for '{node.Target}'");
+		if (target.SemanticType.HasFlag(SemanticType.Function)) {
+			node.Semantic = target;
+		} else if (target.SemanticType.HasFlag(SemanticType.Type) && target.Type is ICompositeType ct) {
+			node.Semantic = new ImplicitConstructor(ct);
+		} else throw new CompileError(node, $"No function named '{node.Target}' could be found.");
+		if (node.Semantic is MagicFunction mf) {
+			mf.ReturnType.Semantic = mf.FullName switch {
+				"ord" => InferOrdType(node),
+				"range" => new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType)))),
+				"$print" => new TypeRef(Types.Int32),
+				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
+				"ptr$AsSpan" => new TypeRef(mf.Type),
+				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
+			};
+		}
+		var func = node.Semantic as IFunction ?? throw new CompileError(node, $"Function call is not bound to a function");
+		for (int i = 0; i < node.Args.Length; ++i) {
+			var paramType = func.Args[i].ParamType.Semantic?.Type;
+			if (paramType != null && paramType != node.Args[i].Semantic!.Type) {
+				node.Args[i].Annotate("cast", paramType);
+			}
+		}
+	}
+
+	public override void VisitMemberIdentifier(MemberIdentifier node)
+	{
+		Visit(node.ParentExpr);
+		var pSem = node.ParentExpr.Semantic
+			?? throw new CompileError(node.ParentExpr, $"No value named '{node.ParentExpr}' could be found.");
+		var sem = pSem.Type.GetMember(node.Name);
+		if (sem == null) {
+			var matches = Scan(s => s.Type is IModule m && m.ExtendsType == pSem.Type && m.GetMember(node.Name) != null, SemanticType.Type);
+			if (matches.Count == 0) {
+				throw new CompileError(node, $"Type '{pSem.Type}' does not contain a member named '{node.Name}'.");
+			}
+			sem = matches[0].Type.GetMember(node.Name);
+		}
+		node.Semantic = sem;
+	}
+
+	public override void VisitIdentifier(Identifier node)
+	{
+		var target = Lookup(node.Name);
+		node.Semantic = target.Count switch {
+			0 => throw new CompileError(node, $"No value named '{node.Name}' could be found."),
+			1 => target[0],
+			_ => throw new CompileError(node, $"Multiple elements named '{node.Name}' found in scope."),
+		};
 	}
 
 	public override void VisitForStatement(ForStatement node)
@@ -154,28 +236,6 @@ public class InferTypes : VisitorCompileStep
 			}
 		}
 		node.Semantic = new Indexing(node, type);
-	}
-
-	public override void VisitFunctionCallExpression(FunctionCallExpression node)
-	{
-		base.VisitFunctionCallExpression(node);
-		if (node.Semantic is MagicFunction mf) {
-			mf.ReturnType.Semantic = mf.FullName switch {
-				"ord" => InferOrdType(node),
-				"range" => new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType)))),
-				"$print" => new TypeRef(Types.Int32),
-				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
-				"ptr$AsSpan" => new TypeRef(mf.Type),
-				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
-			};
-		}
-		var func = node.Semantic as IFunction ?? throw new CompileError(node, $"Function call is not bound to a function");
-		for (int i = 0; i < node.Args.Length; ++i) {
-			var paramType = func.Args[i].ParamType.Semantic?.Type;
-			if (paramType != null && paramType != node.Args[i].Semantic!.Type) {
-				node.Args[i].Annotate("cast", paramType);
-			}
-		}
 	}
 
 	private static TypeRef InferOrdType(FunctionCallExpression node)

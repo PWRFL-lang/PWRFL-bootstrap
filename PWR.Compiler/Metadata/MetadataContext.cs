@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
+
 using PWR.Compiler.Helpers;
 using PWR.Compiler.Semantics;
 
@@ -143,7 +144,11 @@ internal class MetadataContext : IDisposable
 	{
 		var parentTok = LookupSemantic(parent);
 		var typeType = GetTypeType(typ);
-		var type = new TypeDefinition(0, AddString(typ.Name), typeType, default, parentTok, 0);
+		var assoc = typ switch {
+			Module { Decl.ExtendType: { } et } => AddBlob(Signatures.WriteField(et.Semantic!.Type, this)),
+			_ => 0
+		};
+		var type = new TypeDefinition(0, AddString(typ.Name), typeType, default, parentTok, assoc);
 		var token = new Token(TYPE_DEF_ID, TypeDefinitionTable.Count);
 		TypeDefinitionTable.Add(type);
 		_tokenCache.Add(typ, token);
@@ -167,7 +172,8 @@ internal class MetadataContext : IDisposable
 	{
 		var parentTok = LookupSemantic(parent);
 		var sig = AddBlob(Signatures.WriteMethod(function, this));
-		var func = new MethodDefinition(parentTok.Value, AddString(((ISemantic)function).Name), default, sig, default);
+		var nameRef = AddString(((ISemantic)function).Name);
+		var func = new MethodDefinition(parentTok.Value, nameRef, function.HasSelf ? MethodAttributes.HasSelf : default, sig, default);
 		var token = new Token(METHOD_DEF_ID, MethodDefinitionTable.Count);
 		MethodDefinitionTable.Add(func);
 		_tokenCache.Add((ISemantic)function, token);

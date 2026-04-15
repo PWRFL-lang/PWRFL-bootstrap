@@ -46,5 +46,12 @@ public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier n
 		return oldCount != collector.Count;
 	}
 
+	public bool Scan(Func<ISemantic, bool> predicate, List<ISemantic> collector, SemanticType type)
+	{
+		var oldCount = collector.Count;
+		collector.AddRange(SymbolTable.Where(s => ((uint)s.SemanticType & (uint)type) != 0 && predicate(s)));
+		return oldCount != collector.Count;
+	}
+
 	void IScope.Add(ISemantic semantic) => SymbolTable.Add(semantic);
 }

@@ -3,7 +3,7 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Semantics;
 
-public class FunctionDef(FunctionDeclaration decl, ISemantic? owner = null) : ISemantic, IFunction
+public class FunctionDef(FunctionDeclaration decl, bool hasSelf, ISemantic? owner = null) : ISemantic, IFunction
 {
 	public FunctionDeclaration Decl { get; } = decl;
 	public ISemantic? Owner { get; } = owner;
@@ -13,6 +13,7 @@ public class FunctionDef(FunctionDeclaration decl, ISemantic? owner = null) : IS
 	public SemanticType SemanticType => SemanticType.Function;
 
 	public IType Type => Decl.ReturnType?.Semantic?.Type ?? Types.Void;
+	public bool HasSelf { get; } = hasSelf;
 
 	TypeReference? IFunction.ReturnType => Decl.ReturnType;
 

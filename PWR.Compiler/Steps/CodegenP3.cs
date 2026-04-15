@@ -13,6 +13,7 @@ using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;
 using PWR.Compiler.TypeSystem;
 using PWR.Compiler.TypeSystem.External;
+using PWR.Compiler.TypeSystem.Internal;
 
 namespace PWR.Compiler.Steps;
 
@@ -23,6 +24,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	private readonly string _filename = filename;
 	private readonly bool _isLibrary = isLibrary;
 	private IRBuilder _builder = null!;
+	private LValueVisitor _lValueVisitor = null!;
 	private readonly Stack<LLVMValueRef> _values = [];
 	private readonly Stack<string> _namespaces = [];
 	private LLVMValueRef _last;
@@ -30,6 +32,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	private readonly Dictionary<string, LLVMValueRef> _locals = [];
 	private readonly Dictionary<string, LLVMValueRef> _globals = [];
 	private readonly Dictionary<string, LLVMTypeRef> _builtinTypes = [];
+	private readonly Dictionary<string, LLVMTypeRef> _customTypes = [];
 	private readonly Dictionary<LLVMTypeRef, LLVMTypeRef> _spanTypes = [];
 	private readonly List<LLVMValueRef> _moduleInits = [];
 	private LLVMTypeRef _mainType;
@@ -38,6 +41,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	public override Project Run(Project tree)
 	{
 		_builder = new(_context);
+		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType);
 
 		LoadStdlib();
 		LoadImports(tree);
@@ -85,6 +89,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Debug.Assert(strPtr.Context.Handle == _module.Context.Handle);
 		_builtinTypes.Add("string", stringType);
 
+		_builtinTypes.Add("ptr", LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0));
+
+		/*
 		var memcpyType = LLVMTypeRef.CreateFunction(
 			_context.Handle.VoidType,
 			[
@@ -99,6 +106,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (memcpy.Handle == default)
 			memcpy = _module.AddFunction("llvm.memcpy.p0.p0.i64", memcpyType);
 		_functions.Add("memcpy", (memcpyType, memcpy));
+		*/
 	}
 
 	private void LoadImports(Project tree)
@@ -201,12 +209,31 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	public override void VisitAnnotation(Annotation node)
 	{ }
 
+	public override void VisitStructDeclaration(StructDeclaration node)
+	{
+		_namespaces.Push(node.Name.ToString());
+		try {
+			var fields = node.Body.OfType<FieldDeclaration>().ToArray();
+			var inits = fields.Where(d => d.Value?.IsLiteral == false).ToArray();
+			if (inits.Length > 0) {
+				throw new NotImplementedException();
+			}
+			var typ = _context.Handle.CreateNamedStruct(node.Name.Semantic!.FullName);
+			typ.StructSetBody([.. fields.Select(f => LookupType(f.Semantic!.Type))], false);
+			_customTypes.Add(typ.StructName, typ);
+			Visit(node.Body);
+		}
+		finally {  
+			_namespaces.Pop();
+		}
+	}
+
 	public override void VisitModuleDeclaration(ModuleDeclaration node)
 	{
 		_namespaces.Push(node.Name.ToString());
 		try {
 			base.VisitModuleDeclaration(node);
-			var inits = node.Init.Where(d => !d.Value.IsLiteral).ToArray();
+			var inits = node.Body.OfType<FieldDeclaration>().Where(d => d.Value?.IsLiteral == false).ToArray();
 			if (inits.Length > 0) {
 				BuildModuleInits(node, inits);
 			}
@@ -215,7 +242,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		}
 	}
 
-	private void BuildModuleInits(ModuleDeclaration node, VarDeclarationStatement[] inits)
+	private void BuildModuleInits(ModuleDeclaration node, FieldDeclaration[] inits)
 	{
 		var func = _module.AddFunction($"{node.Name}$$init", _mainType);
 		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
@@ -298,12 +325,15 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		return result;
 	}
 
+	private LLVMTypeRef BuildSpanType(SpanType type) => BuildSpanType(LookupType(type.BaseType), type.BaseType.Name);
+
 	private LLVMTypeRef LookupType(IType type) => type switch {
 		PrimitiveType pt => pt.Type,
 		SpanType st => BuildSpanType(LookupType(st.BaseType), st.BaseType.Name),
 		TypeSystem.ArrayType at => BuildSpanType(LookupType(at.BaseType), at.BaseType.Name),
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
 		RefType rt => LLVMTypeRef.CreatePointer(LookupType(rt.BaseType), 0),
+		InternalStruct ist => _customTypes[ist.Name],
 		_ => throw new NotImplementedException()
 	};
 
@@ -314,6 +344,20 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	{
 		var layout = new DataLayout(_module.DataLayout);
 		return LLVM.ABISizeOfType(layout.Handle, type);
+	}
+
+	public override void VisitFieldDeclaration(FieldDeclaration node)
+	{
+		var sem = node.Decl.Semantic!;
+		var varType = LookupType(sem.Type);
+		if (sem.SemanticType.HasFlag(SemanticType.Global)) {
+			if (node.VarType == VarUsage.Const) {
+				VisitGlobalConstDeclaration(node.Decl, node.Value!, varType, (GlobalFieldDecl)sem);
+			} else {
+				var constInit = node.Value?.IsLiteral == true ? node.Value : null;
+				VisitGlobalFieldDeclaration(node.Decl, constInit, varType, (GlobalFieldDecl)sem);
+			}
+		}
 	}
 
 	public override void VisitVarDeclarationStatement(VarDeclarationStatement node)
@@ -441,7 +485,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Visit(node.Right);
 		Debug.Assert(_values.Count == 1);
 		var r = _values.Pop();
-		Visit(node.Left);
+		_lValueVisitor.Visit(node.Left);
 		Debug.Assert(_values.Count == 1);
 		var l = _values.Pop();
 		var lType = l.TypeOf;
@@ -521,21 +565,53 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 
 	public override void VisitFunctionCallExpression(FunctionCallExpression node)
 	{
+		int selfCount = 0;
+		if (node.Target is MemberIdentifier mi && node.Semantic!.SemanticType.HasFlag(SemanticType.HasSelf)) {
+			selfCount = 1;
+			Visit(mi.ParentExpr);
+		}
 		Visit(node.Args);
-		Span<LLVMValueRef> args = stackalloc LLVMValueRef[node.Args.Length];
-		for (int i = 1; i <= node.Args.Length; ++i) {
+		Span<LLVMValueRef> args = stackalloc LLVMValueRef[node.Args.Length + selfCount];
+		for (int i = 1; i <= args.Length; ++i) {
 			args[^i] = _values.Pop();
 		}
 		if (node.Semantic!.SemanticType.HasFlag(SemanticType.Magic)) {
-			VisitMagicFunctionCall(node, args);
-			return;
+			if (node.Semantic is ImplicitConstructor ic) {
+				VisitImplicitConstructorCall(node, ic);
+			} else {
+				VisitMagicFunctionCall(node, args);
+				return;
+			}
 		}
 		if (!_functions.TryGetValue(node.Semantic!.FullName, out var callee)) {
 			throw new CompileError(node, $"GetNamedFunction failed for '{node.Semantic!.Name}'");
 		}
 		var isVoid = node.Target.Semantic!.Type == Types.Void;
-		var result = _builder.Handle.BuildCall2(callee.Type, callee.Function, args, isVoid ? [] : node.Target.Name.AsSpan());
+		var result = _builder.Handle.BuildCall2(callee.Type, callee.Function, args, isVoid ? [] : node.Target.ToString().AsSpan());
 		_values.Push(result);
+	}
+
+	private void VisitImplicitConstructorCall(FunctionCallExpression node, ImplicitConstructor ic)
+	{
+		if (!_functions.TryGetValue(ic.Name, out var data)) {
+			var typ = (ICompositeType)ic.Type;
+			var lTyp = LookupType(typ);
+			var @params = typ.Fields.Select(f => LookupType(f.Type)).ToArray();
+			var fType = LLVMTypeRef.CreateFunction(lTyp, @params, false);
+			var func = _module.AddFunction(ic.Name, fType);
+			var preserved = _builder.Handle.InsertBlock;
+			try {
+				_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+				var result = lTyp.Undef;
+				for (uint i = 0; i < @params.Length; ++i) {
+					result = _builder.Handle.BuildInsertValue(result, func.GetParam(i), i);
+				}
+				_builder.Handle.BuildRet(result);
+			} finally {
+				_builder.Handle.PositionAtEnd(preserved);
+			}
+			_functions.Add(ic.Name, (fType, func));
+		}
 	}
 
 	private void VisitMagicFunctionCall(FunctionCallExpression node, Span<LLVMValueRef> args)
@@ -553,6 +629,16 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				var pVal = _values.Pop();
 				_values.Push(_builder.Handle.BuildExtractValue(pVal, 0, "spanData"));
 				break;
+			case "ptr$AsSpan":
+				parent = ((MemberIdentifier)node.Target).ParentExpr;
+				Visit(parent);
+				pVal = _values.Pop();
+				var spanType = BuildSpanType((SpanType)node.Semantic.Type);
+				var result = spanType.Undef;
+				result = _builder.Handle.BuildInsertValue(result, pVal, 0, "span.data");
+				result = _builder.Handle.BuildInsertValue(result, args[0], 1, "span.len");
+				_values.Push(result);
+				break;
 			default:
 				throw new NotImplementedException();
 		}
@@ -568,6 +654,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				throw new NotImplementedException();
 		}
 	}
+
+	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent) 
+		=> _values.Push(_builder.Handle.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
 
 	public override void VisitMatchExpression(MatchExpression node)
 	{
@@ -650,7 +739,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Visit(idxExpr);
 		Debug.Assert(_values.Count == count + 1);
 		var idx = _values.Pop();
-		var result = _builder.Handle.BuildInBoundsGEP2(elType, expr, new ReadOnlySpan<LLVMValueRef>(in idx), "index");
+		var result = _builder.Handle.BuildLoad2(elType, _builder.Handle.BuildInBoundsGEP2(elType, expr, [idx], "indexPtr".AsSpan()), "index");
 		_values.Push(result);
 	}
 
@@ -710,6 +799,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			span = _builder.Handle.BuildInsertValue(span, strDataPtr, 0, "spanData");
 			span = _builder.Handle.BuildInsertValue(span, _builder.Handle.BuildLoad2(_context.Handle.Int32Type, strLenPtr), 1, "spanLen");
 			return span;
+		}
+		if (type is TypeSystem.ArrayType && targetType is SpanType) {
+			return expr;
 		}
 		throw new NotImplementedException();
 	}
@@ -777,12 +869,12 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			"dataPtr".AsSpan());
 		var memcpy = _functions["memcpy"];
 		var data = _builder.Handle.BuildExtractValue(span, 0, "data"); // i8*
-		var len64 = _builder.Handle.BuildZExt(len, _context.Handle.Int64Type, "len64");  
+		//var len64 = _builder.Handle.BuildZExt(len, _context.Handle.Int64Type, "len64");  
 		_builder.Handle.BuildCall2(memcpy.Type, memcpy.Function, [
 				dataPtrPtr, // dest
 				data,        // src
-				len64,       // size
-				LLVMValueRef.CreateConstInt(_context.Handle.Int1Type, 0, false)
+				len//len64,       // size
+				//LLVMValueRef.CreateConstInt(_context.Handle.Int1Type, 0, false)
 			],
 			[]
 		);
@@ -814,10 +906,15 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				_values.Push(_builder.Handle.BuildLoad2(LookupType(node.Semantic.Type), ptr, "var_" + node.Semantic.Name));
 				break;
 			case Semantics.Module:
+			case StructDecl:
 				break;
 			case MagicProperty mp:
 				var parent = _values.Pop();
 				VisitMagicPropertyCall(mp, parent);
+				break;
+			case FieldDecl fd:
+				parent = _values.Pop();
+				VisitFieldDecl(fd, parent);
 				break;
 			default:
 				throw new CompileError(node, "Unknown Identifier semantic type");

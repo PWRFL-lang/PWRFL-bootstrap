@@ -31,13 +31,25 @@ internal class BindExpressions : ScopeSensitiveCompileStep
 		}
 	}
 
+	public override void VisitFieldDeclaration(FieldDeclaration node)
+	{
+		if (node.Semantic == null) {
+			Visit(node.Decl);
+			var containingScope = _scopes.Peek();
+			node.Semantic = containingScope switch {
+				ModuleDeclaration md => new GlobalFieldDecl(node, md),
+				_ => throw new NotImplementedException()
+			};
+			containingScope.Add(node.Semantic);
+		}
+	}
+
 	public override void VisitVarDeclaration(VarDeclaration node)
 	{
 		Visit(node.VarType);
 		var containingScope = _scopes.Peek();
 		node.Semantic = containingScope switch {
 			FunctionDeclaration or CodeFile or Block => new VariableDecl(node),
-			ModuleDeclaration md => new GlobalFieldDecl(node, md),
 			_ => throw new NotImplementedException()
 		};
 		containingScope.Add(node.Semantic);

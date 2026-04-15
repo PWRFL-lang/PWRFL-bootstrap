@@ -24,8 +24,21 @@ public class BaseVisitor : IVisitor
 	{
 		Visit(node.Annotations);
 		Visit(node.Name);
-		Visit(node.Init);
+		Visit(node.ExtendType);
 		Visit(node.Body);
+	}
+
+	public virtual void VisitStructDeclaration(StructDeclaration node)
+	{
+		Visit(node.Annotations);
+		Visit(node.Name);
+		Visit(node.Body);
+	}
+
+	public virtual void VisitFieldDeclaration(FieldDeclaration node)
+	{
+		Visit(node.Decl);
+		Visit(node.Value);
 	}
 
 	public virtual void VisitAnnotation(Annotation node) => Visit(node.Call);

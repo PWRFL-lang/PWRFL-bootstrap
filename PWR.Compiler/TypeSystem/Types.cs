@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 
 using LLVMSharp;
-using LLVMSharp.Interop;
 
 namespace PWR.Compiler.TypeSystem;
 
@@ -15,15 +14,18 @@ public static class Types
 		Void = new PrimitiveType(handle.VoidType, "void");
 		Bool = new PrimitiveType(handle.Int1Type, "bool");
 		Int32 = new PrimitiveType(handle.Int32Type, "int");
+		Byte = new PrimitiveType(handle.Int8Type, "byte");
 		Char = new PrimitiveType(handle.Int8Type, "char");
-		Ptr = new PrimitiveType(LLVMTypeRef.CreatePointer(handle.VoidType, 0), "ptr");
+		String = new StringType();
+		Ptr = new PointerType();
 		BuildCompatibleTypes();
 	}
 
 	public static IType Void { get; private set; } = null!;
 	public static IType Bool { get; private set; } = null!;
 	public static IType Int32 { get; private set; } = null!;
-	public static IType String { get; } = new StringType();
+	public static IType String { get; private set; } = null!;
+	public static IType Byte { get; private set; } = null!;
 	public static IType Char { get; private set; } = null!;
 	public static IType Ptr { get; private set; } = null!;
 
@@ -32,6 +34,7 @@ public static class Types
 	private static void BuildCompatibleTypes() => _compatibleTypes = new List<KeyValuePair<IType, IType>>() {
 		KeyValuePair.Create(Int32, Char),
 		KeyValuePair.Create(Char, Int32),
+		KeyValuePair.Create(Int32, Byte),
 	}.ToLookup(kvp => kvp.Key, kvp => kvp.Value);
 
 	public static bool IsCompatible(IType l, IType r) => _compatibleTypes.Contains(l) && _compatibleTypes[l].Contains(r);

@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
 using LLVMSharp.Interop;
 
 using PWR.Compiler.Metadata;
@@ -39,5 +42,15 @@ public class Project(params CodeFile[] files): Node(default), IScope
 			found |= iFound;
 		}
 		return found;
+	}
+
+	public bool Scan(Func<ISemantic, bool> predicate, List<ISemantic> collector, SemanticType type)
+	{
+		var count = collector.Count;
+		collector.AddRange(_globals.Values.Where(g => ((uint)g.SemanticType & (uint)type) != 0 && predicate(g)));
+		foreach (var imp in Imports) {
+			imp.Scan(predicate, collector, type);
+		}
+		return collector.Count > count;
 	}
 }

@@ -26,7 +26,7 @@ internal record struct TypeDefinition(
 	TypeOfType Type,
 	TypeFlags Flags,
 	Token ParentType,
-	int Metaclass) : IMetadataRow
+	int AssociatedTypeRef) : IMetadataRow
 {
 	internal readonly string GetName(MetadataContext context) => context.GetString(NameRef);
 	internal readonly string? GetNamespace(MetadataContext context) 

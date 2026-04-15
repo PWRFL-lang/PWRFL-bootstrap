@@ -5,13 +5,19 @@ using PWR.Compiler.Semantics;
 
 namespace PWR.Compiler.TypeSystem.Internal;
 
-public class InternalModule(ModuleDeclaration decl) : IType, IModule
+public class InternalStruct(StructDeclaration decl) : ICompositeType
 {
 	public string Name => Decl.Name.ToString();
 
-	public ModuleDeclaration Decl { get; } = decl;
+	public StructDeclaration Decl { get; } = decl;
 
-	public IType? ExtendsType => Decl.ExtendType?.Semantic?.Type;
+	public ISemantic[] Fields
+	{
+		get {
+			field ??= [.. Decl.Body.OfType<FieldDeclaration>().Select(d => d.Semantic!)];
+			return field;
+		}
+	}
 
 	ISemantic? IType.GetMember(string name) => Decl.Body.FirstOrDefault(d => d.Semantic?.Name == name)?.Semantic;
 }

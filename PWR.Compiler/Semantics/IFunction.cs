@@ -6,4 +6,5 @@ public interface IFunction
 {
 	TypeReference? ReturnType { get; } 
 	ParameterDeclaration[] Args { get; }
+	bool HasSelf { get; }
 }

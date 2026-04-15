@@ -13,6 +13,15 @@ module Kernel32
 	end
 end
 
+def memcpy(dst: ptr, src: ptr, count: int): ptr
+	var dstSpan = dst.AsSpan(count)
+	let srcSpan = src.AsSpan(count)
+	for i in range (0, count)
+		dstSpan[i] = srcSpan[i]
+	end
+	return dst
+end
+
 module Console
 	const std_output_handle = -11
 	const newline = "\r\n"
@@ -25,6 +34,47 @@ module Console
 	def PrintLn(s: string)
 		Print(s)
 		Print(newline)
+	end
+end
+
+module IntMethods extends int
+	def intMagnitude(i: int): int
+		if i >= 10000
+			if i >= 1000000
+				return if i >= 100000000 then 9 + ord(i >= 1000000000) else 7 + ord(i >= 10000000)
+			else
+				return 5 + ord(i >= 100000)
+			end
+		else
+			return if i >= 100 then 3 + ord(i >= 1000) else 1 + ord(i >= 10)
+		end
+	end
+
+	def doIntToStr(value: int, mag: int, result: char span)
+		for i in range(mag - 1, 0, -1)
+			let digit = value % 10
+			result[i] = '0' + digit
+			value //= 10
+		end
+	end
+
+	def intToStrPos(i: int): string
+		let mag = intMagnitude(i)
+		var result = new char[mag]
+		doIntToStr(i, mag, result)
+		return new string(result)
+	end
+
+	def intToStrNeg(i: int): string
+		let mag = intMagnitude(i)
+		var result = new char[mag + 1]
+		result[0] = '-'
+		doIntToStr(i, mag, result[1..])
+		return new string(result)
+	end
+
+	def ToString(self: int): string
+		return if self < 0 then intToStrNeg(-self) else intToStrPos(self)
 	end
 end
 

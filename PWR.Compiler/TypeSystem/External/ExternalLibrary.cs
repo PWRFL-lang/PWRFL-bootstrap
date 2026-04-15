@@ -27,8 +27,9 @@ internal class ExternalLibrary(MetadataContext context, string name) : IScope
 		var ns = typ.GetNamespace(context);
 		var name = typ.GetName(context);
 		var parent = typ.GetParentType(context);
+		var assoc = typ.AssociatedTypeRef == 0 ? null : Signatures.ReadField(context.GetBlob(typ.AssociatedTypeRef), context);
 		return typ.Type switch {
-			TypeOfType.Module => new ExternalModule(ns, name, parent, context, idx),
+			TypeOfType.Module => new ExternalModule(ns, name, parent, assoc, context, idx),
 			_ => throw new NotImplementedException()
 		};
 	}
@@ -43,6 +44,19 @@ internal class ExternalLibrary(MetadataContext context, string name) : IScope
 		var result = Types.FirstOrDefault(t => t.Name == name);
 		if (result != null) {
 			collector.Add(new TypeRef(result));
+			return true;
+		}
+		return false;
+	}
+
+	public bool Scan(Func<ISemantic, bool> predicate, List<ISemantic> collector, SemanticType type)
+	{
+		if ((type & SemanticType.Type) == 0) {
+			return false;
+		}
+		var result = Types.Select(t => new TypeRef(t)).FirstOrDefault(predicate);
+		if (result != null) {
+			collector.Add(result);
 			return true;
 		}
 		return false;

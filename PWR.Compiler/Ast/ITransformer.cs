@@ -6,6 +6,8 @@ public interface ITransformer
 	Node? VisitCodeFile(CodeFile node);
 	Node? VisitAnnotation(Annotation node);
 	Node? VisitModuleDeclaration(ModuleDeclaration node);
+	Node? VisitStructDeclaration(StructDeclaration node);
+	Node? VisitFieldDeclaration(FieldDeclaration node);
 	Node? VisitFunctionDeclaration(FunctionDeclaration node);
 	Node? VisitParameterDeclaration(ParameterDeclaration node);
 	Node? VisitVarDeclaration(VarDeclaration node);

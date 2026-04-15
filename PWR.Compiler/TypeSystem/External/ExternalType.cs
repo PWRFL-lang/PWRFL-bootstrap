@@ -66,6 +66,6 @@ internal abstract class ExternalType(string? ns, string name, IType? parent, Met
 		var name = _context.GetString(func.NameRef);
 		var sigBlob = _context.GetBlob(func.MethodSigRef);
 		var sig = Signatures.ReadFunc(sigBlob, _context);
-		return new ExternalMethod(name, sig, [.. paramNames], owner);
+		return new ExternalMethod(name, sig, [.. paramNames], owner, func.Flags.HasFlag(MethodAttributes.HasSelf));
 	}
 }

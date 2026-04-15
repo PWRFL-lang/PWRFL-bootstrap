@@ -16,4 +16,5 @@ public class MagicFunction(string name, string fullName, TypeReference returnTyp
 	public SemanticType SemanticType => SemanticType.Magic | SemanticType.Function;
 
 	public IType Type => ReturnType.Semantic!.Type;
+	public bool HasSelf => false;
 }

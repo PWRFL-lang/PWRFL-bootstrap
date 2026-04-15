@@ -59,4 +59,16 @@ internal class Phase3
 
 	[Test]
 	public void HelloWorld() => RunTest("Console.PrintLn(\"Hello, World!\")", "Hello, World!\r\n");
+
+	[Test]
+	public void Structs1() => RunTest("""
+		struct Point
+			X: int
+			Y: int
+		end
+
+		var p = Point(1, 2)
+		Console.Print((p.X + p.Y).ToString())
+		""",
+		"3");
 }

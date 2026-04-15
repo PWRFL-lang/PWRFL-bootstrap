@@ -60,12 +60,32 @@ public class BaseTransformer : ITransformer
 	{
 		var annotations = Visit(node.Annotations) ?? [];
 		var name = (Identifier)VisitIdentifier(node.Name)!;
-		var init = Visit(node.Init)!;
+		var extendType = VisitType(node.ExtendType);
 		var body = Visit(node.Body)!;
-		if (annotations == node.Annotations && name == node.Name && body == node.Body && init == node.Init) {
+		if (annotations == node.Annotations && name == node.Name && extendType == node.ExtendType && body == node.Body) {
 			return node;
 		}
-		return node.With(annotations, name, body, init);
+		return node.With(annotations, name, body, extendType);
+	}
+
+	public virtual Node? VisitStructDeclaration(StructDeclaration node)
+	{
+		var annotations = Visit(node.Annotations) ?? [];
+		var name = (Identifier)VisitIdentifier(node.Name)!;
+		var body = Visit(node.Body)!;
+		if (annotations == node.Annotations && name == node.Name && body == node.Body) {
+			return node;
+		}
+		return node.With(annotations, name, body);
+	}
+
+	public virtual Node? VisitFieldDeclaration(FieldDeclaration node)
+	{
+		var decl = (VarDeclaration)Visit(node.Decl)!;
+		var value = VisitExpression(node.Value)!;
+		return (decl == node.Decl && value == node.Value)
+			? node
+			: new FieldDeclaration(node.Position, decl, value, node.VarType);
 	}
 
 	public virtual Node? VisitAnnotation(Annotation node)
@@ -207,7 +227,7 @@ public class BaseTransformer : ITransformer
 
 	public virtual Node? VisitFunctionCallExpression(FunctionCallExpression node)
 	{
-		var target = VisitID(node.Target)!;
+		var target = VisitExpression(node.Target)!;
 		var args = Visit(node.Args) ?? [];
 		return (target == node.Target && args == node.Args)
 			? node

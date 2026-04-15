@@ -94,6 +94,8 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		Debug.Assert(strPtr.Context.Handle == _module.Context.Handle);
 		_builtinTypes.Add("string", stringType);
 
+		_builtinTypes.Add("ptr", LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0));
+
 		var memcpyType = LLVMTypeRef.CreateFunction(
 			_context.Handle.VoidType,
 			[
@@ -390,7 +392,7 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 			throw new CompileError(node, $"GetNamedFunction failed for '{node.Semantic!.FullName}'");
 		}
 		var isVoid = node.Target.Semantic!.Type == Types.Void;
-		var result = _builder.Handle.BuildCall2(callee.Type, callee.Function, args, isVoid ? [] : node.Target.Name.AsSpan());
+		var result = _builder.Handle.BuildCall2(callee.Type, callee.Function, args, isVoid ? [] : node.Target.ToString().AsSpan());
 		_values.Push(result);
 	}
 

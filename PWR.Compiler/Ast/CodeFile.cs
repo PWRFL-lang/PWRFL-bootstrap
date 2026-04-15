@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using LLVMSharp.Interop;
@@ -31,6 +32,13 @@ public class CodeFile(string filename, Declaration[] decls, Statement[] body) : 
 	{
 		var oldCount = collector.Count;
 		collector.AddRange(SymbolTable.Where(s => ((uint)s.SemanticType & (uint)type) != 0 && s.Name == name));
+		return oldCount != collector.Count;
+	}
+
+	public bool Scan(Func<ISemantic, bool> predicate, List<ISemantic> collector, SemanticType type)
+	{
+		var oldCount = collector.Count;
+		collector.AddRange(SymbolTable.Where(s => ((uint)s.SemanticType & (uint)type) != 0 && predicate(s)));
 		return oldCount != collector.Count;
 	}
 

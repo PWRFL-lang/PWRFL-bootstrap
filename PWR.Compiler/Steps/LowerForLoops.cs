@@ -9,7 +9,7 @@ public class LowerForLoops : TransformerCompileStep
 		var idx = node.Index;
 		var coll = node.Coll;
 		var body = Visit(node.Body)!;
-		if (coll is FunctionCallExpression { Target.Name: "range" } range) {
+		if (coll is FunctionCallExpression { Target: Identifier {Name: "range" } } range) {
 			return BuildForRange(node.Position, idx, range, body);
 		}
 		throw new CompileError(coll, "Iterators are not supported yet");

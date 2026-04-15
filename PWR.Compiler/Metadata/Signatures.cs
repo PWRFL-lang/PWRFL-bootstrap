@@ -134,6 +134,9 @@ internal static class Signatures
 			case StringType:
 				writer.Write((byte)SigElement.String);
 				break;
+			case PointerType:
+				writer.Write((byte)SigElement.Ptr);
+				break;
 			case ICollectionType ct:
 				WriteCollectionType(ct, ref writer, context);
 				break;

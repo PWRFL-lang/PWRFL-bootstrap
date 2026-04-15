@@ -9,7 +9,7 @@ namespace PWR.Compiler.Semantics;
 
 internal class ExternalMethod : ISemantic, IFunction
 {
-	public ExternalMethod(string name, IType[] sig, string[] names, IType owner)
+	public ExternalMethod(string name, IType[] sig, string[] names, IType owner, bool hasSelf)
 	{
 		Name = name;
 		Type = sig[^1];
@@ -20,19 +20,26 @@ internal class ExternalMethod : ISemantic, IFunction
 				new Identifier(default, p.Key),
 				new SimpleTypeReference(default, p.Value.Name) { Semantic = new TypeRef(p.Value) }))];
 		ReturnType = new SimpleTypeReference(default, Type.Name) { Semantic = new TypeRef(Type) };
+		_hasSelf = hasSelf;
 	}
 
 	public string Name { get; }
 
 	public string FullName => $"{Parent.Name}${Name}";
 
-	public SemanticType SemanticType => SemanticType.Function | SemanticType.External;
+	private readonly bool _hasSelf;
+
+	public SemanticType SemanticType => _hasSelf
+		? SemanticType.Function | SemanticType.External | SemanticType.HasSelf
+		: SemanticType.Function | SemanticType.External;
 
 	public IType Type { get; }
 
 	public IType Parent { get; }
+	public bool HasSelf => _hasSelf;
 
 	public TypeReference? ReturnType { get; }
 
 	public ParameterDeclaration[] Args { get; }
+
 }

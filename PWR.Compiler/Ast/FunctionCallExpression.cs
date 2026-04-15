@@ -2,15 +2,15 @@
 
 namespace PWR.Compiler.Ast;
 
-public class FunctionCallExpression(Identifier target, Expression[] args) : Expression(target.Position)
+public class FunctionCallExpression(Expression target, Expression[] args) : Expression(target.Position)
 {
-	public FunctionCallExpression(Identifier target, List<Expression> args) : this(target, args.ToArray())
+	public FunctionCallExpression(Expression target, List<Expression> args) : this(target, args.ToArray())
 	{ }
 
-	public FunctionCallExpression With(Identifier target, Expression[] args)
+	public FunctionCallExpression With(Expression target, Expression[] args)
 		=> new(target, args) { Semantic = Semantic };
 
-	public Identifier Target { get; } = target;
+	public Expression Target { get; } = target;
 	public Expression[] Args { get; } = args;
 	public override NodeType Type => NodeType.FunctionCall;
 

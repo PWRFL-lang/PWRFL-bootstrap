@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 
 using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
@@ -6,17 +7,34 @@ using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Steps;
 
-public class BindFunctions : ScopeSensitiveCompileStep
+public class BindMembers : ScopeSensitiveCompileStep
 {
 	private static IType GetType(ISemanticNode node) => node.Semantic?.Type ?? throw new CompileError((Node)node, $"No type bound for node.");
 
+	public override void VisitCodeFile(CodeFile node)
+	{
+		_scopes.Push(node);
+		try {
+			Visit(node.Decls);
+		} finally {
+			_scopes.Pop(); 
+		}
+	}
+
 	public override void VisitFunctionDeclaration(FunctionDeclaration node)
 	{
-		base.VisitFunctionDeclaration(node);
+		// do not recurse into function bodies
+		_scopes.Push(node);
+		try {
+			Visit(node.Parameters);
+			Visit(node.ReturnType);
+		} finally {
+			_scopes.Pop(); 
+		}
 		var containingScope = _scopes.Peek();
 		var owner = containingScope is ModuleDeclaration ? ((Declaration)containingScope).Semantic : null;
-		var hasSelf = containingScope is FunctionDeclaration 
-			|| (containingScope is ModuleDeclaration { ExtendType: { } } && node.Parameters is [{ Name.Name : "self"}, ..]);
+		var hasSelf = containingScope is FunctionDeclaration
+			|| (containingScope is ModuleDeclaration { ExtendType: { } } && node.Parameters is [{ Name.Name: "self" }, ..]);
 		node.Semantic = new FunctionDef(node, hasSelf, owner);
 		_scopes.Peek().Add(node.Semantic);
 	}
@@ -27,6 +45,20 @@ public class BindFunctions : ScopeSensitiveCompileStep
 		var paramCount = ((FunctionDeclaration)_scopes.Peek()).SymbolTable.Count;
 		node.Semantic = new ParamDef(node, paramCount);
 		_scopes.Peek().Add(node.Semantic);
+	}
+
+	public override void VisitFieldDeclaration(FieldDeclaration node)
+	{
+		Debug.Assert(node.Semantic == null);
+		Visit(node.Decl);
+		var containingScope = _scopes.Peek();
+		node.Semantic = containingScope switch {
+			ModuleDeclaration md => new GlobalFieldDecl(node, md),
+			StructDeclaration sd => new FieldDecl(node, sd, sd.FieldCount),
+			_ => throw new NotImplementedException()
+		};
+		containingScope.Add(node.Semantic);
+		node.Decl.Semantic = node.Semantic;
 	}
 
 	public override void VisitSimpleTypeReference(SimpleTypeReference node)

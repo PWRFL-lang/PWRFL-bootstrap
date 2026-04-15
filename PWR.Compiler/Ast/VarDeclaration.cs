@@ -18,6 +18,8 @@ public class VarDeclaration(Position pos, string name, TypeReference? type) : De
 
 	public override void Accept(IVisitor visitor) => visitor.VisitVarDeclaration(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitVarDeclaration(this);
+
+	public override string ToString() => VarType == null ? Name : $"{Name}: {VarType}";
 }
 
 public class VarDeclarationStatement(Position pos, VarDeclaration decl, Expression value, VarUsage varType) : Statement(pos), ISemanticNode

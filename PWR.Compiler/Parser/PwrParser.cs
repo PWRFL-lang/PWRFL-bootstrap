@@ -134,7 +134,7 @@ internal readonly struct PwrParser
 			}
 		}
 		_tokens.Consume();
-		return new ModuleDeclaration(pos, name, body, []) { Annotations = [..annotations] };
+		return new ModuleDeclaration(pos, name, body, null) { Annotations = [..annotations] };
 	}
 
 	private List<Statement> ParseBlock()

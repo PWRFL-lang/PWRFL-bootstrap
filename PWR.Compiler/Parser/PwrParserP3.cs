@@ -31,7 +31,7 @@ internal readonly struct PwrParserP3
 		var declarations = new List<Declaration>();
 		while (_tokens.LA(1) != PwrLexer.Eof) {
 			switch (_tokens.LA(1)) {
-				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT:
+				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT or PwrLexer.STRUCT:
 					declarations.Add(ParseDeclaration());
 					break;
 				case PwrLexer.NEWLINE:
@@ -72,6 +72,7 @@ internal readonly struct PwrParserP3
 		return _tokens.LA(1) switch {
 			PwrLexer.FUNCTION => ParseFunctionDeclaration(annotations),
 			PwrLexer.MODULE => ParseModuleDeclaration(annotations),
+			PwrLexer.STRUCT => ParseStructDeclaration(annotations),
 			_ => throw new UnreachableException(),
 		};
 	}
@@ -80,7 +81,7 @@ internal readonly struct PwrParserP3
 	{
 		var pos = GetPosition(_tokens.LT(1));
 		_tokens.Consume();
-		var annotation = ParseIdentifier();
+		var annotation = ParseExpression();
 		if (annotation is not FunctionCallExpression fc) {
 			throw new ParseError(annotation.Position, "Annotations must be written as a function call");
 		}
@@ -114,8 +115,9 @@ internal readonly struct PwrParserP3
 		_tokens.Consume();
 		var id = Expect(PwrLexer.IDENTIFIER);
 		var name = new Identifier(GetPosition(id), id.Text);
+		var extendType = TryConsume(PwrLexer.EXTENDS) ? ParseTypeReference() : null;
+		Expect(PwrLexer.NEWLINE);
 		var body = new List<Declaration>();
-		var init = new List<VarDeclarationStatement>();
 		while (_tokens.LA(1) != PwrLexer.END) {
 			switch (_tokens.LA(1)) {
 				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT:
@@ -125,13 +127,14 @@ internal readonly struct PwrParserP3
 					_tokens.Consume();
 					break;
 				case PwrLexer.LET or PwrLexer.CONST:
-					var decl = ParseVarDeclarationStatement();
-					init.Add(decl);
+					var decl = ParseFieldDeclaration();
+					body.Add(decl);
 					Expect(PwrLexer.NEWLINE);
 					break;
 				default:
 					if (_tokens.LA(1) == PwrLexer.IDENTIFIER) {
-						body.Add(ParseVarDeclaration());
+						var result = ParseVarDeclaration();
+						body.Add(new FieldDeclaration(result.Position, result, null, VarUsage.Var));
 						Expect(PwrLexer.NEWLINE);
 					} else {
 						throw new ParseError(GetPosition(_tokens.LT(1)), "Unexpected module member");
@@ -140,7 +143,43 @@ internal readonly struct PwrParserP3
 			}
 		}
 		_tokens.Consume();
-		return new ModuleDeclaration(pos, name, body, init) { Annotations = [..annotations] };
+		return new ModuleDeclaration(pos, name, body, extendType) { Annotations = [..annotations] };
+	}
+
+	private StructDeclaration ParseStructDeclaration(List<Annotation> annotations)
+	{
+		var pos = GetPosition(_tokens.LT(1));
+		_tokens.Consume();
+		var id = Expect(PwrLexer.IDENTIFIER);
+		var name = new Identifier(GetPosition(id), id.Text);
+		Expect(PwrLexer.NEWLINE);
+		var body = new List<Declaration>();
+		while (_tokens.LA(1) != PwrLexer.END) {
+			switch (_tokens.LA(1)) {
+				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT:
+					body.Add(ParseDeclaration());
+					break;
+				case PwrLexer.NEWLINE:
+					_tokens.Consume();
+					break;
+				case PwrLexer.LET or PwrLexer.CONST:
+					var decl = ParseFieldDeclaration();
+					body.Add(decl);
+					Expect(PwrLexer.NEWLINE);
+					break;
+				default:
+					if (_tokens.LA(1) == PwrLexer.IDENTIFIER) {
+						var result = ParseVarDeclaration();
+						body.Add(new FieldDeclaration(result.Position, result, null, VarUsage.Var));
+						Expect(PwrLexer.NEWLINE);
+					} else {
+						throw new ParseError(GetPosition(_tokens.LT(1)), "Unexpected struct member");
+					}
+					break;
+			}
+		}
+		_tokens.Consume();
+		return new StructDeclaration(pos, name, body) { Annotations = [..annotations] };
 	}
 
 	private List<Statement> ParseBlock()
@@ -254,12 +293,25 @@ internal readonly struct PwrParserP3
 		return new WhileStatement(pos, cond, body);
 	}
 
+	private FieldDeclaration ParseFieldDeclaration()
+	{
+		var token = _tokens.LT(1);
+		_tokens.Consume();
+		var usage = token.Type switch {
+			PwrLexer.CONST => VarUsage.Const,
+			PwrLexer.LET => VarUsage.Let,
+			_ => throw new ParseError(GetPosition(token), $"Unknown field declaration type: '{token.Text}'")
+		};
+		VarDeclaration decl = ParseVarDeclaration();
+		var value = TryConsume(PwrLexer.ASSIGN) ? ParseExpression() : null;
+		return new FieldDeclaration(GetPosition(token), decl, value, usage);
+	}
+
 	private VarDeclarationStatement ParseVarDeclarationStatement()
 	{
 		var token = _tokens.LT(1);
 		_tokens.Consume();
-		var usage = token.Type switch
-		{
+		var usage = token.Type switch {
 			PwrLexer.CONST => VarUsage.Const,
 			PwrLexer.LET => VarUsage.Let,
 			PwrLexer.VAR => VarUsage.Var,
@@ -273,8 +325,9 @@ internal readonly struct PwrParserP3
 
 	private VarDeclaration ParseVarDeclaration()
 	{
-		var name = ParseBareIdentifier();
-		return new VarDeclaration(name.Position, name.Name, null);
+		var name = ParseIdentifier();
+		var type = TryConsume(PwrLexer.COLON) ? ParseTypeReference() : null;
+		return new VarDeclaration(name.Position, name.Name, type);
 	}
 
 	private ReturnStatement ParseReturnStatement()
@@ -314,33 +367,58 @@ internal readonly struct PwrParserP3
 		return result;
 	}
 
-	private Expression ParseTerm() => _tokens.LA(1) switch {
-		PwrLexer.CHAR_LITERAL => ParseCharLiteral(),
-		PwrLexer.DOUBLE_QUOTED_STRING => ParseDqs(),
-		PwrLexer.NUMBER => ParseNumber(),
-		PwrLexer.IDENTIFIER => ParseIdentifier(),
-		PwrLexer.LPAREN => ParseParenExpression(),
-		PwrLexer.MATCH => ParseMatchExpression(),
-		PwrLexer.NEW => ParseNewExpression(),
-		PwrLexer.NULL => ParseNullLiteral(),
-		PwrLexer.IF => ParseTernaryExpression(),
-		PwrLexer.PLUS or PwrLexer.MINUS or PwrLexer.INC or PwrLexer.DEC => ParseUnaryExpression(),
-		PwrLexer.REF => ParseRefExpression(),
-		_ => throw new ParseError(GetPosition(_tokens.LT(1)), $"Unexpected expression value: '{_tokens.LT(1).Text}'")
-	};
+	private Expression ParseTerm()
+	{
+		var result = _tokens.LA(1) switch {
+			PwrLexer.CHAR_LITERAL => ParseCharLiteral(),
+			PwrLexer.DOUBLE_QUOTED_STRING => ParseDqs(),
+			PwrLexer.NUMBER => ParseNumber(),
+			PwrLexer.IDENTIFIER => ParseIdentifier(),
+			PwrLexer.LPAREN => ParseParenExpression(),
+			PwrLexer.MATCH => ParseMatchExpression(),
+			PwrLexer.NEW => ParseNewExpression(),
+			PwrLexer.NULL => ParseNullLiteral(),
+			PwrLexer.IF => ParseTernaryExpression(),
+			PwrLexer.PLUS or PwrLexer.MINUS or PwrLexer.INC or PwrLexer.DEC => ParseUnaryExpression(),
+			PwrLexer.REF => ParseRefExpression(),
+			_ => throw new ParseError(GetPosition(_tokens.LT(1)), $"Unexpected expression value: '{_tokens.LT(1).Text}'")
+		};
+		while (true) {
+			switch (_tokens.LA(1)) {
+				case PwrLexer.DOUBLE_QUOTED_STRING or PwrLexer.IDENTIFIER or PwrLexer.NUMBER or PwrLexer.IF:
+					if (result is not Identifier id) {
+						throw new ParseError(GetPosition(_tokens.LT(1)), $"Unexpected expression value: '{_tokens.LT(1).Text}'");
+					}
+					result = ParseBareFunctionCall(id);
+					break;
+				case PwrLexer.LPAREN:
+					result = ParseFunctionCall(result);
+					break;
+				case PwrLexer.LBRACK:
+					result = ParseIndexing(result);
+					break;
+				case PwrLexer.DOT:
+					_tokens.Consume();
+					result = new MemberIdentifier(result, Expect(PwrLexer.IDENTIFIER).Text);
+					break;
+				default:
+					return result;
+			};
+		}
+	}
 
-	private static readonly Dictionary<string, UnaryOperator> UNARY_OPS = new (){
-		{ "+", UnaryOperator.Plus },
-		{ "-", UnaryOperator.Minus },
-		{ "++", UnaryOperator.Inc },
-		{ "--", UnaryOperator.Dec },
+	private static readonly Dictionary<int, UnaryOperator> UNARY_OPS = new (){
+		{ PwrLexer.PLUS, UnaryOperator.Plus },
+		{ PwrLexer.MINUS, UnaryOperator.Minus },
+		{ PwrLexer.INC, UnaryOperator.Inc },
+		{ PwrLexer.DEC, UnaryOperator.Dec },
 	};
 
 	private UnaryExpression ParseUnaryExpression()
 	{
 		var token = _tokens.LT(1);
 		_tokens.Consume();
-		if (!UNARY_OPS.TryGetValue(token.Text, out UnaryOperator op)) {
+		if (!UNARY_OPS.TryGetValue(token.Type, out UnaryOperator op)) {
 			throw new ParseError(GetPosition(_tokens.LT(1)), $"Unexpected unary operator: '{token.Text}'");
 		}
 		var expr = ParseExpression();
@@ -426,18 +504,7 @@ internal readonly struct PwrParserP3
 		return result;
 	}
 
-	private Expression ParseIdentifier()
-	{
-		Identifier id = ParseBareIdentifier();
-		return _tokens.LA(1) switch {
-			PwrLexer.DOUBLE_QUOTED_STRING or PwrLexer.IDENTIFIER or PwrLexer.NUMBER or PwrLexer.IF => ParseBareFunctionCall(id),
-			PwrLexer.LPAREN => ParseFunctionCall(id),
-			PwrLexer.LBRACK => ParseIndexing(id),
-			_ => id
-		};
-	}
-
-	private Identifier ParseBareIdentifier()
+	private Identifier ParseIdentifier()
 	{
 		var token = _tokens.LT(1);
 		_tokens.Consume();
@@ -488,11 +555,11 @@ internal readonly struct PwrParserP3
 		return new(GetPosition(token), cases, ParseExpression());
 	}
 
-	private FunctionCallExpression ParseFunctionCall(Identifier id)
+	private FunctionCallExpression ParseFunctionCall(Expression target)
 	{
 		_tokens.Consume();
 		var args = ParseCommaList(ParseExpression, PwrLexer.RPAREN);
-		return new FunctionCallExpression(id, args);
+		return new FunctionCallExpression(target, args);
 	}
 
 	private FunctionCallExpression ParseBareFunctionCall(Identifier id)

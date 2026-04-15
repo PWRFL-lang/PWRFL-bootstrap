@@ -11,4 +11,11 @@ public class BindTypes : ScopeSensitiveCompileStep
 		node.Semantic = new Module(node);
 		_scopes.Peek().Add(node.Semantic);
 	}
+
+	public override void VisitStructDeclaration(StructDeclaration node)
+	{
+		base.VisitStructDeclaration(node);
+		node.Semantic = new StructDecl(node);
+		_scopes.Peek().Add(node.Semantic);
+	}
 }

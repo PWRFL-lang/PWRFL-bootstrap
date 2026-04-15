@@ -6,6 +6,8 @@ public interface IVisitor
 	void VisitCodeFile(CodeFile node);
 	void VisitAnnotation(Annotation node);
 	void VisitModuleDeclaration(ModuleDeclaration node);
+	void VisitStructDeclaration(StructDeclaration node);
+	void VisitFieldDeclaration(FieldDeclaration node);
 	void VisitFunctionDeclaration(FunctionDeclaration node);
 	void VisitParameterDeclaration(ParameterDeclaration node);
 	void VisitVarDeclaration(VarDeclaration node);

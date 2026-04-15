@@ -43,4 +43,5 @@ public enum NodeType
 	RefTypeReference,
 	RefExpression,
 	NullLiteralExpression,
+	StructDeclaration,
 }
