@@ -498,7 +498,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			AssignOperator.InPlaceIDiv => _builder.Handle.BuildSDiv(l, r, "InPlaceIDiv"),
 			_ => throw new UnreachableException()
 		};
-		if (node.Left is Identifier id) {
+		if (node.Left is Identifier id && id.Type == NodeType.Identifier) {
 			var pos = _locals[id.Name];
 			_builder.Handle.BuildStore(value, pos);
 		} else {

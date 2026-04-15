@@ -57,16 +57,23 @@ internal class LValueVisitor(
 			case ParamDef:
 			case VariableDecl:
 				var ptr = locals[node.Semantic.Name];
-				values.Push(builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name));
+				values.Push(node.Parent.Type == NodeType.MemberIdentifier ? ptr : builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name));
 				break;
 			case GlobalFieldDecl gf:
 				ptr = globals[node.Semantic.FullName];
 				values.Push(builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name));
 				break;
+			case FieldDecl fd:
+				var parent = values.Pop();
+				VisitFieldDecl(fd, parent);
+				break;
 			default:
 				throw new CompileError(node, "Unknown Identifier semantic type");
 		}
 	}
+
+	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent)
+		=> values.Push(builder.BuildStructGEP2(lookupType(fd.ParentType.Semantic!.Type), parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
 
 	public void VisitIfStatement(IfStatement node) => throw new NotImplementedException();
 
@@ -108,7 +115,13 @@ internal class LValueVisitor(
 
 	public void VisitMatchExpression(MatchExpression node) => throw new NotImplementedException();
 
-	public void VisitMemberIdentifier(MemberIdentifier node) => throw new NotImplementedException();
+	public void VisitMemberIdentifier(MemberIdentifier node)
+	{
+		var count = values.Count;
+		Visit(node.ParentExpr);
+		Debug.Assert(values.Count == count + 1);
+		VisitIdentifier(node);
+	}
 
 	public void VisitModuleDeclaration(ModuleDeclaration node) => throw new NotImplementedException();
 

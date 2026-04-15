@@ -61,7 +61,7 @@ internal class Phase3
 	public void HelloWorld() => RunTest("Console.PrintLn(\"Hello, World!\")", "Hello, World!\r\n");
 
 	[Test]
-	public void Structs1() => RunTest("""
+	public void Structs() => RunTest("""
 		struct Point
 			X: int
 			Y: int
@@ -73,7 +73,7 @@ internal class Phase3
 		"3");
 
 	[Test]
-	public void Structs2() => RunTest("""
+	public void StructsMethods() => RunTest("""
 		struct Point
 			X: int
 			Y: int
@@ -87,4 +87,18 @@ internal class Phase3
 		Console.Print(p.Sum().ToString())
 		""",
 		"3");
+
+	[Test]
+	public void StructsValueSemantics() => RunTest("""
+		struct Point
+			X: int
+			Y: int
+		end
+
+		var p = Point(1, 2)
+		var q = p
+		q.X = 99
+		Console.Print(p.X.ToString())
+		""",
+		"1");
 }
