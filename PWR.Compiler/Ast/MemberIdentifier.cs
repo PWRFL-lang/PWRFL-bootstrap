@@ -11,4 +11,7 @@ public class MemberIdentifier(Expression parent, string name): Identifier(parent
 	public override void Accept(IVisitor visitor) => visitor.VisitMemberIdentifier(this);
 
 	public override string ToString() => $"{ParentExpr}.{Name}";
+
+	internal MemberIdentifier With(Expression parent)
+		=> new(parent, Name) { Semantic = this.Semantic };
 }

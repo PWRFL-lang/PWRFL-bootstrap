@@ -3,7 +3,7 @@ using PWR.Compiler.Semantics;
 
 namespace PWR.Compiler.Steps;
 
-public class InsertImplicitSelf: TransformerCompileStep
+public class InsertImplicitSelf : TransformerCompileStep
 {
 	public override Node? VisitAnnotation(Annotation node) => node;
 
@@ -26,7 +26,7 @@ public class InsertImplicitSelf: TransformerCompileStep
 
 	public override Node? VisitFunctionDeclaration(FunctionDeclaration node)
 	{
-		if (node.Semantic is FunctionDef { HasSelf: true } fd && node.Parameters is not [{ Name.Name: "self" }, ..]) {
+		if (node.Semantic is MethodDef { HasSelf: true } fd && node.Parameters is not [{ Name.Name: "self" }, ..]) {
 			var body = Visit(node.Body) ?? [];
 			var implicitSelf = new ParameterDeclaration(
 					new Identifier(default, "self"),
@@ -38,7 +38,7 @@ public class InsertImplicitSelf: TransformerCompileStep
 			}
 			ParameterDeclaration[] parameters = [implicitSelf, .. node.Parameters];
 			var result = node.With(node.Name, parameters, node.ReturnType, body);
-			result.Semantic = new FunctionDef(result, true, fd.Owner);
+			result.Semantic = new MethodDef(result, true, fd.Owner);
 			return result;
 		}
 		return base.VisitFunctionDeclaration(node);

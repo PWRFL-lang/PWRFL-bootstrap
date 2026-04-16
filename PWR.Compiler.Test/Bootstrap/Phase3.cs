@@ -116,4 +116,33 @@ internal class Phase3
 		Console.Print(Sum(Point(3, 4)).ToString())
 		""",
 		"7");
+
+	[Test]
+	public void StructsFields() => RunTest("""
+		struct Point
+			X: int
+			Y: int
+		end
+
+		struct Rectangle
+			TopLeft: Point
+			BottomRight: Point
+
+			def Width(): int
+				return BottomRight.X - TopLeft.X
+			end
+
+			def Height(): int
+				return BottomRight.Y - TopLeft.Y
+			end
+
+			def Area(): int
+				return Width() * Height()
+			end
+		end
+
+		var r = Rectangle(Point(0, 0), Point(10, 5))
+		Console.Print(r.Area().ToString())
+		""",
+		"50");
 }

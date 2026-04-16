@@ -324,7 +324,7 @@ public class BaseTransformer : ITransformer
 	public virtual Node? VisitMemberIdentifier(MemberIdentifier node)
 	{
 		var parent = VisitExpression(node.ParentExpr);
-		return parent == null ? null : parent == node.ParentExpr ? node : new MemberIdentifier(parent, node.Name);
+		return parent == null ? null : parent == node.ParentExpr ? node : node.With(parent);
 	}
 
 	public virtual Node? VisitCharLiteralExpression(CharLiteralExpression node) => node;
