@@ -536,6 +536,8 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			ArithmeticOperator.Add => _builder.Handle.BuildAdd(l, r, "add"),
 			ArithmeticOperator.Subtract => _builder.Handle.BuildSub(l, r, "sub"),
 			ArithmeticOperator.Multiply => _builder.Handle.BuildMul(l, r, "mul"),
+			ArithmeticOperator.Divide => _builder.Handle.BuildFDiv(l, r, "fdiv"),
+			ArithmeticOperator.IDivide => _builder.Handle.BuildSDiv(l, r, "idiv"),
 			ArithmeticOperator.Modulus => _builder.Handle.BuildSRem(l, r, "mod"),
 			_ => throw new NotImplementedException()
 		};

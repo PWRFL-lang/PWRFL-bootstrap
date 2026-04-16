@@ -145,4 +145,20 @@ internal class Phase3
 		Console.Print(r.Area().ToString())
 		""",
 		"50");
+
+	[Test]
+	public void StructsReturning() => RunTest("""
+		struct Point
+			X: int
+			Y: int
+		end
+
+		def Midpoint(a: Point, b: Point): Point
+			return Point((a.X + b.X) // 2, (a.Y + b.Y) // 2)
+		end
+
+		var m = Midpoint(Point(0, 0), Point(10, 10))
+		Console.Print(m.X.ToString())
+		""",
+		"5");
 }
