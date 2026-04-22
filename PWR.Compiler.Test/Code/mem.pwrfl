@@ -1,0 +1,76 @@
+struct FreeBlock
+	Next: FreeBlock ref?
+end
+
+struct SizeClass
+	FreeList: FreeBlock ref?
+	BlockSize: int
+	Pool: byte span
+	PoolUsed: int
+end
+
+struct Allocator
+	SmallClasses: SizeClass[16]
+
+	constructor Create()
+		let sc = self.SmallClasses
+		for i in range(0, 16)
+			sc[i].BlockSize = (i + 1) * 16
+			sc[i].FreeList = nil
+			sc[i].PoolUsed = 0
+		end
+	end
+end
+
+module Memory
+	let allocator = Allocator.Create()
+	let PoolSize = 65536    ; 64KB pools
+
+	def getSizeClass(size: int): int
+		return ((size + 15) // 16) - 1
+	end
+
+	def Alloc(size: int): byte span
+		if size <= 256
+			let classIndex = getSizeClass(size)
+			var sc = allocator.SmallClasses[classIndex]
+			
+			; try free list first
+			if sc.FreeList != nil
+				let block = sc.FreeList
+				sc.FreeList = block.Next
+				allocator.SmallClasses[classIndex] = sc
+				return block.AsSpan(sc.BlockSize)
+			end
+
+			; refill pool if exhausted
+			if sc.PoolUsed + sc.BlockSize > sc.Pool.Length
+				sc.Pool = Kernel32.AllocMem(PoolSize)
+				sc.PoolUsed = 0
+			end
+
+			; carve from pool
+			let offset = sc.PoolUsed
+			sc.PoolUsed += sc.BlockSize
+			allocator.SmallClasses[classIndex] = sc
+			return sc.Pool[offset .. offset + sc.BlockSize]
+		else
+			; large block: round up to page size
+			let pages = ((size + 4095) // 4096) * 4096
+			return Kernel32.AllocMem(pages)
+		end
+	end
+
+	def Free(block: byte span)
+		if block.Length <= 256
+			let classIndex = getSizeClass(block.Length)
+			var sc = allocator.SmallClasses[classIndex]
+			let freeBlock = cast block: FreeBlock
+			freeBlock.Next = sc.FreeList
+			sc.FreeList = freeBlock
+			allocator.SmallClasses[classIndex] = sc
+		else
+			Kernel32.FreeMem(block)
+		end
+	end
+end

@@ -1,4 +1,6 @@
-﻿namespace PWR.Compiler.Ast;
+﻿using System.Diagnostics;
+
+namespace PWR.Compiler.Ast;
 
 public enum ComparisonOperator
 {
@@ -20,4 +22,18 @@ public class ComparisonExpression(Expression l, Expression r, ComparisonOperator
 
 	public override void Accept(IVisitor visitor) => visitor.VisitComparisonExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitComparisonExpression(this);
+
+	public override string ToString()
+	{
+		var oper = Operator switch {
+			ComparisonOperator.Equals => "==",
+			ComparisonOperator.NotEquals => "!=",
+			ComparisonOperator.LessThan => "<",
+			ComparisonOperator.GreaterThan => ">",
+			ComparisonOperator.LessThanOrEqual => "<=",
+			ComparisonOperator.GreaterThanOrEqual => ">=",
+			_ => throw new UnreachableException()
+		};
+		return $"({Left} {oper} {Right})";
+	}
 }

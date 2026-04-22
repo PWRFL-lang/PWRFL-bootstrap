@@ -3,11 +3,25 @@
 module Kernel32
 	def abstract GetStdHandle(nStdHandle: int): ptr
 	def abstract WriteFile(hFile: ptr, lpBuffer: ptr, nNumberOfBytesToWrite: int, lpNumberOfBytesWritten: int ref, lpOverlapped: ptr): int
+	def abstract VirtualAlloc(lpAddress: ptr, dwSize: long, flAllocationType: int, flProtect: int): ptr
+	def abstract VirtualFree(lpAddress: ptr, dwSize: long, dwFreeType: int): int
+
+	const alloc_type = 0x3000 ; MEM_COMMIT | MEM_RESERVE
+	const free_type = 0x8000  ; MEM_RELEASE
+	const protect_type = 4    ; PAGE_READWRITE
+
+	def AllocMem(size: int): byte span
+		return VirtualAlloc(nil, size, alloc_type, protect_type).AsSpan(size)
+	end
+
+	def FreeMem(mem: byte span)
+		VirtualFree(mem.ToPtr(), 0, free_type)
+	end
 
 	def WriteFileText(hFile: ptr, buffer: char span)
 		while buffer.Length > 0
 			var count = 0
-			WriteFile(hFile, buffer.ToPtr(), buffer.Length, ref count, null)
+			WriteFile(hFile, buffer.ToPtr(), buffer.Length, ref count, nil)
 			buffer = buffer[count..]
 		end
 	end

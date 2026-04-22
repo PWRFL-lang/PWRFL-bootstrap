@@ -37,11 +37,12 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	private readonly List<LLVMValueRef> _moduleInits = [];
 	private LLVMTypeRef _mainType;
 	private LLVMValueRef _currentFunc;
+	private bool _isCtor;
 
 	public override Project Run(Project tree)
 	{
 		_builder = new(_context);
-		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType);
+		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType, () => _currentFunc);
 
 		LoadStdlib();
 		LoadImports(tree);
@@ -219,8 +220,8 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				throw new NotImplementedException();
 			}
 			var typ = _context.Handle.CreateNamedStruct(node.Name.Semantic!.FullName);
-			typ.StructSetBody([.. fields.Select(f => LookupType(f.Semantic!.Type))], false);
 			_customTypes.Add(typ.StructName, typ);
+			typ.StructSetBody([.. fields.Select(f => LookupType(f.Semantic!.Type))], false);
 			Visit(node.Body);
 		}
 		finally {  
@@ -279,14 +280,21 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			_builder.Handle.BuildStore(param, alloc);
 		}
 
+		if (node.IsConstructor) {
+			_isCtor = true;
+			_locals.Add("self", LookupType(node.Semantic!.Type).Undef);
+		}
 		Visit(node.Body);
-		if (node.Body.Length == 0 || node.Body[^1] is not ReturnStatement) {
+		if (_isCtor) {
+			_builder.Handle.BuildRet(_locals["self"]);
+		} else if (node.Body.Length == 0 || node.Body[^1] is not ReturnStatement) {
 			if ((node.ReturnType?.Semantic?.Type ?? Types.Void) == Types.Void) {
 				_builder.Handle.BuildRetVoid();
 			} else {
 				_builder.CreateUnreachable();
 			}
 		}
+		_isCtor = false;
 		func.VerifyFunction(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 		if (char.IsUpper(node.Name.Name[0])) {
 			func.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLExportStorageClass;
@@ -306,10 +314,10 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_functions.Add(name, (funcType, func));
 	}
 
-	private LLVMTypeRef BuildFuncType(IFunction node)
+	private LLVMTypeRef BuildFuncType(IFunction func)
 		=> LLVMTypeRef.CreateFunction(
-			LookupType(node.ReturnType),
-			[.. node.Args.Select(p => LookupType(p.ParamType))],
+			LookupType(((ISemantic)func).Type),
+			[.. func.Args.Select(p => LookupType(p.ParamType))],
 			false
 		);
 
@@ -331,11 +339,23 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		PrimitiveType pt => pt.Type,
 		SpanType st => BuildSpanType(LookupType(st.BaseType), st.BaseType.Name),
 		TypeSystem.ArrayType at => BuildSpanType(LookupType(at.BaseType), at.BaseType.Name),
+		InlineArrayType ia => BuildInlineArrayType(LookupType(ia.BaseType), ia.BaseType.Name, ia.Size!),
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
 		RefType rt => LLVMTypeRef.CreatePointer(LookupType(rt.BaseType), 0),
 		InternalStruct ist => _customTypes[ist.Name],
+		NilableType nt => LookupType(nt.BaseType),
 		_ => throw new NotImplementedException()
 	};
+
+	private LLVMTypeRef BuildInlineArrayType(LLVMTypeRef baseType, string name, Expression size)
+	{
+		var sizeVal = size switch {
+			IntegerLiteralExpression il => il.Value,
+			LiteralExpression => throw new CompileError(size, "Fixed-size array must have an integer size"),
+			_ => throw new CompileError(size, "Fixed-size array must have a constant size"),
+		};
+		return LLVMTypeRef.CreateArray(baseType, (uint)sizeVal);
+	}
 
 	private LLVMTypeRef LookupType(TypeReference? type)
 		=> type == null ? _context.Handle.VoidType : LookupType(type.Semantic!.Type);
@@ -463,9 +483,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Debug.Assert(_values.Count == 0);
 	}
 
-	private void BranchIfNecessary(Statement[] block, LLVMBasicBlockRef end)
+	private void BranchIfNecessary(Block block, LLVMBasicBlockRef end)
 	{
-		if (block.Length > 0 && block[^1] is not ReturnStatement) {
+		if (block.Body.Length > 0 && block.Body[^1] is not ReturnStatement) {
 			_builder.Handle.BuildBr(end);
 		}
 	}
@@ -489,13 +509,14 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Debug.Assert(_values.Count == 1);
 		var l = _values.Pop();
 		var lType = l.TypeOf;
+		var lValue = node.Left is MemberIdentifier ? _builder.Handle.BuildLoad2(LookupType(node.Left.Semantic!.Type), l) : l;
 		var value = node.Op switch {
 			AssignOperator.Assign => r,
-			AssignOperator.InPlaceAdd => _builder.Handle.BuildAdd(l, r, "InPlaceAdd"),
-			AssignOperator.InPlaceSub => _builder.Handle.BuildSub(l, r, "InPlaceSub"),
-			AssignOperator.InPlaceMul => _builder.Handle.BuildMul(l, r, "InPlaceMul"),
+			AssignOperator.InPlaceAdd => _builder.Handle.BuildAdd(lValue, r, "InPlaceAdd"),
+			AssignOperator.InPlaceSub => _builder.Handle.BuildSub(lValue, r, "InPlaceSub"),
+			AssignOperator.InPlaceMul => _builder.Handle.BuildMul(lValue, r, "InPlaceMul"),
 			AssignOperator.InPlaceDiv => throw new NotImplementedException(),
-			AssignOperator.InPlaceIDiv => _builder.Handle.BuildSDiv(l, r, "InPlaceIDiv"),
+			AssignOperator.InPlaceIDiv => _builder.Handle.BuildSDiv(lValue, r, "InPlaceIDiv"),
 			_ => throw new UnreachableException()
 		};
 		if (node.Left is Identifier id && id.Type == NodeType.Identifier) {
@@ -632,6 +653,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				_values.Push(_builder.Handle.BuildExtractValue(pVal, 0, "spanData"));
 				break;
 			case "ptr$AsSpan":
+			case "ref$AsSpan":
 				parent = ((MemberIdentifier)node.Target).ParentExpr;
 				Visit(parent);
 				pVal = _values.Pop();
@@ -657,8 +679,15 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		}
 	}
 
-	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent) 
-		=> _values.Push(_builder.Handle.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
+	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent)
+	{
+		if (parent.TypeOf.Kind == LLVMTypeKind.LLVMPointerTypeKind) {
+			var gep = _builder.Handle.BuildStructGEP2(LookupType(((IMemberSemantic)fd).ParentType), parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}_gep");
+			_values.Push(_builder.Handle.BuildLoad2(LookupType(fd.Type), gep));
+		} else {
+			_values.Push(_builder.Handle.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
+		}
+	}
 
 	public override void VisitMatchExpression(MatchExpression node)
 	{
@@ -715,6 +744,10 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 
 	public override void VisitIndexingExpression(IndexingExpression node)
 	{
+		if (node.Expr.Semantic!.Type is InlineArrayType ia) {
+			VisitInlineArrayIndexing(node, ia);
+			return;
+		}
 		var count = _values.Count;
 		Visit(node.Expr);
 		Debug.Assert(_values.Count == count + 1);
@@ -733,6 +766,44 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		} else {
 			VisitIndexing(span, elType, idxExpr);
 		}
+	}
+
+	private void VisitInlineArrayIndexing(IndexingExpression node, InlineArrayType ia)
+	{
+		var elType = LookupType(ia.BaseType);
+		var sem = node.Expr.Semantic;
+		if (sem is VariableDecl vd) {
+			var expr = _locals[vd.Name];
+			VisitIndexing(expr, elType, node.Indices[0]);
+		} else if (sem is FieldDecl fd) {
+			Debug.Assert(node.Expr.Type == NodeType.MemberIdentifier);
+			VisitFieldFlatIndexing((MemberIdentifier)node.Expr, fd, elType, node.Indices[0]);
+		} else { 
+			throw new NotImplementedException();
+		}
+	}
+
+	private void VisitFieldFlatIndexing(MemberIdentifier expr, FieldDecl fd, LLVMTypeRef elType, Expression idxExpr)
+	{
+		var sem = expr.ParentExpr.Semantic;
+		LLVMValueRef parent;
+		switch (sem) {
+			case GlobalFieldDecl gf:
+				parent = _globals[gf.FullName];
+				break;
+			default:
+				throw new NotImplementedException();
+		}
+		var count = _values.Count;
+		Visit(idxExpr);
+		Debug.Assert(_values.Count == count + 1);
+		var idx = _values.Pop();
+		var parentType = LookupType(expr.ParentExpr.Semantic!.Type);
+		LLVMValueRef zero = LLVM.ConstInt(module.Context.Int32Type, 0, 0);
+		LLVMValueRef fieldIdx = LLVM.ConstInt(module.Context.Int32Type, (ulong)fd.Index, 0);
+		var result = _builder.Handle.BuildGEP2(parentType, parent, [zero, fieldIdx, idx], "index".AsSpan());
+		result = _builder.Handle.BuildLoad2(elType, result, "element");
+		_values.Push(result);
 	}
 
 	private void VisitIndexing(LLVMValueRef expr, LLVMTypeRef elType, Expression idxExpr)
@@ -765,7 +836,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			start = _values.Pop();
 			end = _builder.Handle.BuildSub(end, start);
 		}
-		var newData = _builder.Handle.BuildGEP2(elType, data, new[] { start }, "slice.ptr");
+		var newData = _builder.Handle.BuildGEP2(elType, data, [start], "slice.ptr".AsSpan());
 		var result = spanType.Undef;
 		result = _builder.Handle.BuildInsertValue(result, newData, 0, "slice.data");
 		result = _builder.Handle.BuildInsertValue(result, end, 1, "slice.len");
@@ -804,6 +875,15 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		}
 		if (type is TypeSystem.ArrayType && targetType is SpanType) {
 			return expr;
+		}
+		if (type == Types.Nil && targetType is TypeSystem.PointerType) {
+			return expr;
+		}
+		if (type is SpanType st) {
+			var span = _builder.Handle.BuildExtractValue(expr, 0, "spanData");
+			return _builder.Handle.BuildPointerCast(
+				_builder.Handle.BuildGEP2(_context.Handle.Int8Type, span, [LLVM.ConstInt(_context.Handle.Int32Type, 0, 0)], []),
+				LookupType(RefType.Create(targetType)));
 		}
 		throw new NotImplementedException();
 	}
@@ -946,8 +1026,8 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> _values.Push(LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, (ulong)node.Value));
 
-	public override void VisitNullLiteralExpression(NullLiteralExpression node)
+	public override void VisitNilLiteralExpression(NilLiteralExpression node)
 		=> _values.Push(LLVMValueRef.CreateConstNull(LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0)));
 
-	public override void VisitSelfLiteralExpression(SelfLiteralExpression node) => _values.Push(_currentFunc.FirstParam);
+	public override void VisitSelfLiteralExpression(SelfLiteralExpression node) => _values.Push(_isCtor ? _locals["self"] : _currentFunc.FirstParam);
 }

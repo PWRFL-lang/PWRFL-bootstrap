@@ -16,7 +16,8 @@ internal class LValueVisitor(
 	Stack<LLVMValueRef> values, 
 	Dictionary<string, LLVMValueRef> locals, 
 	Dictionary<string, LLVMValueRef> globals,
-	Func<IType, LLVMTypeRef> lookupType) : IVisitor
+	Func<IType, LLVMTypeRef> lookupType,
+	Func<LLVMValueRef> currentFunc) : IVisitor
 {
 	internal void Visit(Node node) => node.Accept(this);
 
@@ -73,12 +74,23 @@ internal class LValueVisitor(
 	}
 
 	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent)
-		=> values.Push(builder.BuildStructGEP2(lookupType(fd.ParentType.Semantic!.Type), parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
+	{
+		if (parent.TypeOf.Kind == LLVMTypeKind.LLVMPointerTypeKind) {
+			var gep = builder.BuildStructGEP2(lookupType(((IMemberSemantic)fd).ParentType), parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}_gep");
+			values.Push(gep);
+		} else {
+			values.Push(builder.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
+		}
+	}
 
 	public void VisitIfStatement(IfStatement node) => throw new NotImplementedException();
 
 	public void VisitIndexingExpression(IndexingExpression node)
 	{
+		if (node.Expr.Semantic!.Type is InlineArrayType ia) {
+			VisitInlineArrayIndexing(node, ia);
+			return;
+		}
 		var count = values.Count;
 		Visit(node.Expr);
 		Debug.Assert(values.Count == count + 1);
@@ -98,6 +110,21 @@ internal class LValueVisitor(
 		}
 	}
 
+	private void VisitInlineArrayIndexing(IndexingExpression node, InlineArrayType ia)
+	{
+		var elType = lookupType(ia.BaseType);
+		var sem = node.Expr.Semantic;
+		if (sem is VariableDecl vd) {
+			var expr = locals[vd.Name];
+			VisitIndexing(expr, elType, node.Indices[0]);
+		} else if (sem is FieldDecl fd) {
+			Debug.Assert(node.Expr.Type == NodeType.MemberIdentifier);
+			VisitFieldFlatIndexing((MemberIdentifier)node.Expr, fd, node.Indices[0]);
+		} else { 
+			throw new NotImplementedException();
+		}
+	}
+
 	private void VisitIndexing(LLVMValueRef expr, LLVMTypeRef elType, Expression idxExpr)
 	{
 		var count = values.Count;
@@ -105,6 +132,28 @@ internal class LValueVisitor(
 		Debug.Assert(values.Count == count + 1);
 		var idx = values.Pop();
 		var result = builder.BuildInBoundsGEP2(elType, expr, [idx], "index".AsSpan());
+		values.Push(result);
+	}
+
+	private unsafe void VisitFieldFlatIndexing(MemberIdentifier expr, FieldDecl fd, Expression idxExpr)
+	{
+		var sem = expr.ParentExpr.Semantic;
+		LLVMValueRef parent;
+		switch (sem) {
+			case GlobalFieldDecl gf:
+				parent = globals[gf.FullName];
+				break;
+			default:
+				throw new NotImplementedException();
+		}
+		var count = values.Count;
+		Visit(idxExpr);
+		Debug.Assert(values.Count == count + 1);
+		var idx = values.Pop();
+		var parentType = lookupType(expr.ParentExpr.Semantic!.Type);
+		LLVMValueRef zero = LLVM.ConstInt(module.Context.Int32Type, 0, 0);
+		LLVMValueRef fieldIdx = LLVM.ConstInt(module.Context.Int32Type, (ulong)fd.Index, 0);
+		var result = builder.BuildGEP2(parentType, parent, [zero, fieldIdx, idx], "index".AsSpan());
 		values.Push(result);
 	}
 
@@ -129,7 +178,9 @@ internal class LValueVisitor(
 
 	public void VisitNewObjExpression(NewObjExpression node) => throw new NotImplementedException();
 
-	public void VisitNullLiteralExpression(NullLiteralExpression node) => throw new NotImplementedException();
+	public void VisitNilableTypeReference(NilableTypeReference node) => throw new NotImplementedException();
+
+	public void VisitNilLiteralExpression(NilLiteralExpression node) => throw new NotImplementedException();
 
 	public void VisitParameterDeclaration(ParameterDeclaration node) => throw new NotImplementedException();
 
@@ -163,5 +214,5 @@ internal class LValueVisitor(
 
 	public void VisitWhileStatement(WhileStatement node) => throw new NotImplementedException();
 
-	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => throw new NotImplementedException();
+	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => values.Push(currentFunc().FirstParam);
 }

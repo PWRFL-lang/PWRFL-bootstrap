@@ -98,7 +98,7 @@ public class InferTypes : VisitorCompileStep
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Int32);
 
-	public override void VisitNullLiteralExpression(NullLiteralExpression node)
+	public override void VisitNilLiteralExpression(NilLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Ptr);
 
 	public override void VisitUnaryExpression(UnaryExpression node)

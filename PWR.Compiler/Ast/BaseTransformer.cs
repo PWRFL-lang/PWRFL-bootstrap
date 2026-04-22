@@ -133,6 +133,12 @@ public class BaseTransformer : ITransformer
 
 	public virtual Node? VisitSimpleTypeReference(SimpleTypeReference node) => node;
 
+	public Node? VisitNilableTypeReference(NilableTypeReference node)
+	{
+		var typ = VisitType(node.BaseType)!;
+		return typ == node.BaseType ? node : new NilableTypeReference(typ);
+	}
+
 	public virtual Node? VisitArrayTypeReference(ArrayTypeReference node)
 	{
 		var typ = VisitType(node.BaseType)!;
@@ -173,9 +179,9 @@ public class BaseTransformer : ITransformer
 	public virtual Node? VisitIfStatement(IfStatement node)
 	{
 		var cond = VisitExpression(node.Cond)!;
-		var tb = Visit(node.TrueBlock) ?? [];
-		var fb = Visit(node.FalseBlock);
-		return (cond == node.Cond && tb == node.TrueBlock && fb == node.FalseBlock) 
+		var tb = Visit(node.TrueBlock.Body) ?? [];
+		var fb = Visit(node.FalseBlock?.Body);
+		return (cond == node.Cond && tb == node.TrueBlock.Body && fb == node.FalseBlock?.Body)
 			? node
 			: new IfStatement(node.Position, cond, tb, fb);
 	}
@@ -193,8 +199,8 @@ public class BaseTransformer : ITransformer
 	public virtual Node? VisitWhileStatement(WhileStatement node)
 	{
 		var cond = VisitExpression(node.Cond)!;
-		var body = Visit(node.Body) ?? [];
-		return (cond == node.Cond && body == node.Body)
+		var body = Visit(node.Body.Body) ?? [];
+		return (cond == node.Cond && body == node.Body.Body)
 			? node
 			: new WhileStatement(node.Position, cond, body);
 	}
@@ -333,7 +339,7 @@ public class BaseTransformer : ITransformer
 
 	public virtual Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node) => node;
 
-	public virtual Node? VisitNullLiteralExpression(NullLiteralExpression node) => node;
+	public virtual Node? VisitNilLiteralExpression(NilLiteralExpression node) => node;
 
 	public virtual Node? VisitSelfLiteralExpression(SelfLiteralExpression node) => node;
 }

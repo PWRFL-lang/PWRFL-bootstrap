@@ -11,6 +11,7 @@ LPAREN : '(';
 RPAREN : ')';
 DOTDOT : '..';
 DOT : '.';
+QUESTION : '?';
 
 PLUS_EQUALS : '+=';
 MINUS_EQUALS : '-=';
@@ -30,11 +31,14 @@ GTE : '>=';
 LTE : '<=';
 GT : '>';
 LT : '<';
+NOT_EQUALS : '!=';
 EQUALITY : '==';
 ASSIGN : '=';
 
 ABSTRACT : 'abstract';
+CAST : 'cast';
 CONST : 'const';
+CONSTRUCTOR : 'constructor';
 ELIF : 'elif';
 ELSE : 'else';
 END : 'end';
@@ -46,10 +50,12 @@ IN : 'in';
 LET : 'let';
 MATCH : 'match';
 MODULE : 'module';
+NAMESPACE : 'namespace';
 NEW : 'new';
-NULL : 'null';
+NIL : 'nil';
 REF : 'ref';
 RETURN : 'return';
+SELF : 'self';
 STRUCT : 'struct';
 THEN : 'then';
 VAR : 'var';
@@ -114,6 +120,11 @@ DIGIT
 	:	[0-9]
 	;
 
+HEX_INT
+	:	'0x' HEXDIGIT+
+		-> type(NUMBER)
+	;
+
 WS
 	:	(	[ \t\f]
 		)+
@@ -125,3 +136,6 @@ NEWLINE
 		|	'\r' '\n'?
 		)
 	;
+
+COMMENT
+	: ';' ~[\r\n]* -> channel(HIDDEN) ;

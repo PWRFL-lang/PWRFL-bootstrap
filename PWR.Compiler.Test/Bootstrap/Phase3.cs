@@ -22,8 +22,9 @@ internal class Phase3
 		_tempFolder = Path.Combine(Path.GetTempPath(), "pwr");
 		Directory.CreateDirectory(_tempFolder);
 		var filename = Directory.EnumerateFiles(".\\Code", "pwr*.pwrfl").OrderByDescending(f => f).First();
+		var memManager = Directory.EnumerateFiles(".\\Code", "mem*.pwrfl").OrderByDescending(f => f).First();
 		var options = new CompileOptions(
-			[CodeSource.FromFile(filename)],
+			[CodeSource.FromFile(filename), CodeSource.FromFile(memManager)],
 			Path.Combine(_tempFolder, "pwr.dll"), 
 			[],
 			ProjectType: ProjectType.Library,

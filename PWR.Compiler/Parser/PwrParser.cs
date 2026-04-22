@@ -42,7 +42,7 @@ internal readonly struct PwrParser
 					break;
 			}
 		}
-		return new CodeFile(_filename, declarations, body);
+		return new CodeFile(_filename, null, declarations, body);
 	}
 
 	private List<T> ParseCommaList<T>(Func<T> reader, int end)

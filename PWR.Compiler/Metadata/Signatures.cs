@@ -158,7 +158,9 @@ internal static class Signatures
 		var tag = pt.Name switch {
 			"void" => SigElement.Void,
 			"bool" => SigElement.Bool,
+			"byte" => SigElement.I8,
 			"int" => SigElement.I32,
+			"long" => SigElement.I64,
 			"char" => SigElement.Char,
 			"ptr" => SigElement.Ptr,
 			_ => throw new NotImplementedException()
@@ -210,6 +212,7 @@ internal static class Signatures
 		return element switch {
 			SigElement.Void => Types.Void,
 			SigElement.Bool => Types.Bool,
+			SigElement.I8 => Types.Byte,
 			SigElement.I32 => Types.Int32,
 			SigElement.Char => Types.Char,
 			SigElement.Ptr => Types.Ptr,

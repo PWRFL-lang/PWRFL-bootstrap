@@ -10,4 +10,5 @@ public class ArrayTypeReference(TypeReference baseType, Expression? size) : Type
 	public override void Accept(IVisitor visitor) => visitor.VisitArrayTypeReference(this);
 
 	public override Node? Accept(ITransformer visitor) => visitor.VisitArrayTypeReference(this);
+	public override string ToString() => Size == null ? $"{BaseType} array" : $"{BaseType}[{Size}]";
 }

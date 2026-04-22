@@ -10,6 +10,8 @@ namespace PWR.Compiler.Steps;
 
 internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 {
+	private IType? _selfType;
+
 	public override void Visit(Node? node)
 	{
 		base.Visit(node);
@@ -60,6 +62,28 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		}
 	}
 
+	public override void VisitModuleDeclaration(ModuleDeclaration node)
+	{
+		var old = _selfType;
+		try {
+			_selfType = node.ExtendType?.Semantic?.Type;
+			base.VisitModuleDeclaration(node);
+		} finally {
+			_selfType = old;
+		}
+	}
+
+	public override void VisitStructDeclaration(StructDeclaration node)
+	{
+		var old = _selfType;
+		try {
+			_selfType = node.Semantic?.Type;
+			base.VisitStructDeclaration(node);
+		} finally {
+			_selfType = old;
+		}
+	}
+
 	public override void VisitAnnotation(Annotation node)
 	{ }
 
@@ -98,13 +122,20 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		}
 	}
 
+	public override void VisitCastExpression(CastExpression node)
+	{
+		base.VisitCastExpression(node);
+		node.Semantic = new TypeRef(node.CastType.Semantic!.Type);
+	}
+
 	public override void VisitFunctionCallExpression(FunctionCallExpression node)
 	{
 		base.VisitFunctionCallExpression(node);
 		var target = node.Target.Semantic ?? throw new CompileError(node.Target, $"Unable to look up semantic information for '{node.Target}'");
-		if (target.SemanticType.HasFlag(SemanticType.Function)) {
+		var st = target.SemanticType;
+		if (st.HasFlag(SemanticType.Function)) {
 			node.Semantic = target;
-		} else if (target.SemanticType.HasFlag(SemanticType.Type) && target.Type is ICompositeType ct) {
+		} else if (st.HasFlag(SemanticType.Type) && target.Type is ICompositeType ct) {
 			node.Semantic = new ImplicitConstructor(ct);
 		} else throw new CompileError(node, $"No function named '{node.Target}' could be found.");
 		if (node.Semantic is MagicFunction mf) {
@@ -113,7 +144,7 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 				"range" => new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType)))),
 				"$print" => new TypeRef(Types.Int32),
 				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
-				"ptr$AsSpan" => new TypeRef(mf.Type),
+				"ptr$AsSpan" or "ref$AsSpan" => new TypeRef(mf.Type),
 				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
 			};
 		}
@@ -131,16 +162,48 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		Visit(node.ParentExpr);
 		var pSem = node.ParentExpr.Semantic
 			?? throw new CompileError(node.ParentExpr, $"No value named '{node.ParentExpr}' could be found.");
-		var sem = pSem.Type.GetMember(node.Name);
-		if (sem == null) {
-			var matches = Scan(s => s.Type is IModule m && m.ExtendsType == pSem.Type && m.GetMember(node.Name) != null, SemanticType.Type);
-			if (matches.Count == 0) {
-				throw new CompileError(node, $"Type '{pSem.Type}' does not contain a member named '{node.Name}'.");
+		var semType = pSem.Type;
+		while (semType != null) {
+			var sem = semType.GetMember(node.Name);
+			if (sem == null) {
+				var matches = Scan(s => s.Type is IModule m && m.ExtendsType == semType && m.GetMember(node.Name) != null, SemanticType.Type);
+				if (matches.Count == 0) {
+					semType = UnwrapType(semType, node);
+					continue;
+				}
+				sem = matches[0].Type.GetMember(node.Name);
 			}
-			sem = matches[0].Type.GetMember(node.Name);
+			node.Semantic = sem;
+			return;
 		}
-		node.Semantic = sem;
+		throw new CompileError(node, $"Type '{pSem.Type}' does not contain a member named '{node.Name}'.");
 	}
+
+	private static IType? UnwrapType(IType type, MemberIdentifier node)
+	{
+		if (type is RefType rt) {
+			return rt.BaseType;
+		}
+		if (type is NilableType nt /*&& ProvableNotNil(node)*/) {
+			return nt.BaseType;
+		}
+		return null;
+	}
+
+	/*
+	 // This is harder than it seems at first glance.  Work on this later.
+	private static bool ProvableNotNil(MemberIdentifier node)
+	{
+		Node current = node;
+		while (current is not (CodeFile or FunctionDeclaration)) {
+			current = current.Parent;
+			if (current is IConditional ic) {
+				throw new NotImplementedException();
+			}
+		}
+		return false;
+	}
+	*/
 
 	public override void VisitIdentifier(Identifier node)
 	{
@@ -166,8 +229,10 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	public override void VisitAssignStatement(AssignStatement node)
 	{
 		base.VisitAssignStatement(node);
-		if (GetType(node.Left) != GetType(node.Right)) {
-			throw new NotImplementedException();
+		var lType = GetType(node.Left);
+		var rType = GetType(node.Right);
+		if (lType != rType && !Types.IsCompatible(lType, rType)) {
+			throw new CompileError(node, $"A value of type '{rType}' cannot be assigned to a variable of type '{lType}'");
 		}
 	}
 
@@ -180,8 +245,11 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Int32);
 
-	public override void VisitNullLiteralExpression(NullLiteralExpression node)
-		=> node.Semantic = new Literal(node, Types.Ptr);
+	public override void VisitSelfLiteralExpression(SelfLiteralExpression node)
+		=> node.Semantic = new SelfRef(node, _selfType ?? throw new CompileError(node, "No 'self' context is available"));
+
+	public override void VisitNilLiteralExpression(NilLiteralExpression node)
+		=> node.Semantic = new Literal(node, Types.Nil);
 
 	public override void VisitUnaryExpression(UnaryExpression node)
 	{
@@ -300,8 +368,14 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 			"int" => Types.Int32,
 			"string" => Types.String,
 			"ptr" => Types.Ptr,
-			_ => throw new NotImplementedException()
+			_ => CheckType(Lookup(node.Name, SemanticType.Type), node)
 		});
+
+	private static IType CheckType(List<ISemantic> list, SimpleTypeReference node) => list.Count switch {
+		0 => throw new CompileError(node, $"No type named '{node.Name}' could be found."),
+		1 => list[0].Type,
+		_ => throw new CompileError(node, $"Multiple types named '{node.Name}' found in scope."),
+	};
 
 	public override void VisitSpanTypeReference(SpanTypeReference node)
 	{

@@ -12,7 +12,6 @@ public abstract class TypeDeclaration(Position pos, Identifier name, Declaration
 	public Identifier Name { get; } = name;
 	public Declaration[] Body { get; } = body;
 
-
 	internal List<ISemantic> SymbolTable { get; init; } = [];
 
 	public bool Lookup(string name, List<ISemantic> collector, SemanticType type)

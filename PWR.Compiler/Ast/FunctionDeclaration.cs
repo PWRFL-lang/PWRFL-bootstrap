@@ -30,7 +30,7 @@ public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier n
 	public Statement[] Body { get; } = [.. body];
 
 	public FunctionDeclaration With(Identifier name, ParameterDeclaration[] parameters, TypeReference? returnType, Statement[] body)
-		=> new(Position, Flags, name, parameters, returnType, body) { SymbolTable = SymbolTable, Semantic = Semantic };
+		=> new(Position, Flags, name, parameters, returnType, body) { SymbolTable = SymbolTable, Semantic = Semantic, IsConstructor = IsConstructor };
 
 	public override NodeType Type => NodeType.FunctionDeclaration;
 
@@ -38,6 +38,7 @@ public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier n
 	public override Node? Accept(ITransformer visitor) => visitor.VisitFunctionDeclaration(this);
 
 	internal List<ISemantic> SymbolTable { get; init; } = [];
+	public bool IsConstructor { get; init; }
 
 	public bool Lookup(string name, List<ISemantic> collector, SemanticType type)
 	{

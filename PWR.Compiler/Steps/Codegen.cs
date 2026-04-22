@@ -277,9 +277,9 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		Debug.Assert(_values.Count == 0);
 	}
 
-	private void BranchIfNecessary(Statement[] block, LLVMBasicBlockRef end)
+	private void BranchIfNecessary(Block block, LLVMBasicBlockRef end)
 	{
-		if (block.Length > 0 && block[^1] is not ReturnStatement) {
+		if (block.Body.Length > 0 && block.Body[^1] is not ReturnStatement) {
 			_builder.Handle.BuildBr(end);
 		}
 	}

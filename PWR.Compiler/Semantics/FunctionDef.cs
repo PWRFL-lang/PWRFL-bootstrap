@@ -10,9 +10,9 @@ public class FunctionDef(FunctionDeclaration decl, bool hasSelf, ISemantic? owne
 	public string Name => Decl.Name.Name;
 	public string FullName => Owner == null ? Name : $"{Owner.FullName}${Name}";
 
-	public SemanticType SemanticType => HasSelf ? SemanticType.Function | SemanticType.HasSelf : SemanticType.Function;
+	public virtual SemanticType SemanticType => HasSelf ? SemanticType.Function | SemanticType.HasSelf : SemanticType.Function;
 
-	public IType Type => Decl.ReturnType?.Semantic?.Type ?? Types.Void;
+	public virtual IType Type => Decl.ReturnType?.Semantic?.Type ?? Types.Void;
 	public bool HasSelf { get; } = hasSelf;
 
 	TypeReference? IFunction.ReturnType => Decl.ReturnType;

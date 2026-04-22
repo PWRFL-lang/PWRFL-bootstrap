@@ -26,7 +26,7 @@ public class InsertImplicitSelf : TransformerCompileStep
 
 	public override Node? VisitFunctionDeclaration(FunctionDeclaration node)
 	{
-		if (node.Semantic is MethodDef { HasSelf: true } fd && node.Parameters is not [{ Name.Name: "self" }, ..]) {
+		if (node.Semantic is MethodDef { HasSelf: true } fd && node.Parameters is not [{ Name.Name: "self" }, ..] && !node.IsConstructor) {
 			var body = Visit(node.Body) ?? [];
 			var implicitSelf = new ParameterDeclaration(
 					new Identifier(default, "self"),

@@ -12,6 +12,7 @@ public interface IVisitor
 	void VisitParameterDeclaration(ParameterDeclaration node);
 	void VisitVarDeclaration(VarDeclaration node);
 	void VisitSimpleTypeReference(SimpleTypeReference node);
+	void VisitNilableTypeReference(NilableTypeReference node);
 	void VisitArrayTypeReference(ArrayTypeReference node);
 	void VisitSpanTypeReference(SpanTypeReference node);
 	void VisitRefTypeReference(RefTypeReference node);
@@ -42,6 +43,6 @@ public interface IVisitor
 	void VisitCharLiteralExpression(CharLiteralExpression node);
 	void VisitStringLiteralExpression(StringLiteralExpression node);
 	void VisitIntegerLiteralExpression(IntegerLiteralExpression node);
-	void VisitNullLiteralExpression(NullLiteralExpression node);
+	void VisitNilLiteralExpression(NilLiteralExpression node);
 	void VisitSelfLiteralExpression(SelfLiteralExpression node);
 }

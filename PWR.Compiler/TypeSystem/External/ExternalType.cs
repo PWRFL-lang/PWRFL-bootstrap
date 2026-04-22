@@ -1,6 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+
 using PWR.Compiler.Helpers;
 using PWR.Compiler.Metadata;
 using PWR.Compiler.Semantics;

@@ -62,7 +62,9 @@ public class BaseVisitor : IVisitor
 
 	public virtual void VisitSimpleTypeReference(SimpleTypeReference node)
 	{ }
-	
+
+	public virtual void VisitNilableTypeReference(NilableTypeReference node) => Visit(node.BaseType);
+
 	public virtual void VisitArrayTypeReference(ArrayTypeReference node)
 	{
 		Visit(node.BaseType);
@@ -198,7 +200,7 @@ public class BaseVisitor : IVisitor
 	public virtual void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 	{ }
 
-	public virtual void VisitNullLiteralExpression(NullLiteralExpression node)
+	public virtual void VisitNilLiteralExpression(NilLiteralExpression node)
 	{ }
 
 	public virtual void VisitSelfLiteralExpression(SelfLiteralExpression node)

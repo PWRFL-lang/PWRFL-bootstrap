@@ -15,6 +15,7 @@ public interface ITransformer
 	Node? VisitArrayTypeReference(ArrayTypeReference node);
 	Node? VisitSpanTypeReference(SpanTypeReference node);
 	Node? VisitRefTypeReference(RefTypeReference node);
+	Node? VisitNilableTypeReference(NilableTypeReference node); 
 	Node? VisitSequenceTypeReference(SequenceTypeReference node);
 	Node? VisitAssignStatement(AssignStatement node);
 	Node? VisitIfStatement(IfStatement node);
@@ -42,6 +43,6 @@ public interface ITransformer
 	Node? VisitCharLiteralExpression(CharLiteralExpression node);
 	Node? VisitStringLiteralExpression(StringLiteralExpression node);
 	Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node);
-	Node? VisitNullLiteralExpression(NullLiteralExpression node);
+	Node? VisitNilLiteralExpression(NilLiteralExpression node);
 	Node? VisitSelfLiteralExpression(SelfLiteralExpression node);
 }

@@ -30,6 +30,7 @@ internal class ExternalLibrary(MetadataContext context, string name) : IScope
 		var assoc = typ.AssociatedTypeRef == 0 ? null : Signatures.ReadField(context.GetBlob(typ.AssociatedTypeRef), context);
 		return typ.Type switch {
 			TypeOfType.Module => new ExternalModule(ns, name, parent, assoc, context, idx),
+			TypeOfType.Value => new ExternalStruct(ns, name, parent, context, idx),
 			_ => throw new NotImplementedException()
 		};
 	}

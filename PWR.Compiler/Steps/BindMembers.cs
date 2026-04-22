@@ -36,7 +36,11 @@ public class BindMembers : ScopeSensitiveCompileStep
 		var owner = containingScope is TypeDeclaration ? ((Declaration)containingScope).Semantic : null;
 		var hasSelf = containingScope is StructDeclaration
 			|| (containingScope is ModuleDeclaration { ExtendType: { } } && node.Parameters is [{ Name.Name: "self" }, ..]);
-		node.Semantic = owner == null ? new FunctionDef(node, hasSelf, owner) : new MethodDef(node, hasSelf, owner);
+		node.Semantic = owner == null 
+			? new FunctionDef(node, hasSelf, owner) 
+			: node.IsConstructor 
+				? new Constructor(node, owner)
+				: new MethodDef(node, hasSelf, owner);
 		_scopes.Peek().Add(node.Semantic);
 	}
 
@@ -66,8 +70,10 @@ public class BindMembers : ScopeSensitiveCompileStep
 		=> node.Semantic = new TypeRef(node.Name switch {
 			"void" => Types.Void,
 			"bool" => Types.Bool,
+			"byte" => Types.Byte,
 			"char" => Types.Char,
 			"int" => Types.Int32,
+			"long" => Types.Int64,
 			"string" => Types.String,
 			"ptr" => Types.Ptr,
 			_ => CheckType(Lookup(node.Name, SemanticType.Type), node)
@@ -78,6 +84,13 @@ public class BindMembers : ScopeSensitiveCompileStep
 		1 => list[0].Type,
 		_ => throw new CompileError(node, $"Multiple types named '{node.Name}' found in scope."),
 	};
+
+	public override void VisitNilableTypeReference(NilableTypeReference node)
+	{
+		base.VisitNilableTypeReference(node);
+		var baseType = GetType(node.BaseType);
+		node.Semantic = new TypeRef(NilableType.Create(baseType));
+	}
 
 	public override void VisitSpanTypeReference(SpanTypeReference node)
 	{
@@ -91,5 +104,12 @@ public class BindMembers : ScopeSensitiveCompileStep
 		base.VisitRefTypeReference(node);
 		var baseType = GetType(node.BaseType);
 		node.Semantic = new TypeRef(RefType.Create(baseType));
+	}
+
+	public override void VisitArrayTypeReference(ArrayTypeReference node)
+	{
+		base.VisitArrayTypeReference(node);
+		var baseType = GetType(node.BaseType);
+		node.Semantic = new TypeRef(node.Size == null ? ArrayType.Create(baseType) : new InlineArrayType(baseType, node.Size));
 	}
 }

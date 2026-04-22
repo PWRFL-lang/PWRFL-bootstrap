@@ -8,4 +8,5 @@ public class IntegerLiteralExpression(Position position, int value) : LiteralExp
 
 	public override void Accept(IVisitor visitor) => visitor.VisitIntegerLiteralExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitIntegerLiteralExpression(this);
+	public override string ToString() => Value.ToString();
 }

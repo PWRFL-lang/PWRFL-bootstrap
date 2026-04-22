@@ -14,4 +14,5 @@ public class IndexingExpression(Expression expr, Expression[] indices) : Express
 
 	public override void Accept(IVisitor visitor) => visitor.VisitIndexingExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitIndexingExpression(this);
+	public override string ToString() => $"{Expr}[{string.Join(", ", Indices)}]";
 }
