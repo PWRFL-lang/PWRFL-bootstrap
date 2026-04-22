@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 
 namespace PWR.Compiler.Ast;
 
@@ -47,4 +48,18 @@ public class AssignStatement(Expression l, Expression r, AssignOperator op) : St
 	public override void Accept(IVisitor visitor) => visitor.VisitAssignStatement(this);
 
 	public override Node? Accept(ITransformer visitor) => visitor.VisitAssignStatement(this);
+
+	public override string ToString()
+	{
+		var opStr = Op switch {
+			AssignOperator.Assign => "=",
+			AssignOperator.InPlaceAdd => "+=",
+			AssignOperator.InPlaceSub => "-=",
+			AssignOperator.InPlaceMul => "*=",
+			AssignOperator.InPlaceDiv => "/=",
+			AssignOperator.InPlaceIDiv => "//=",
+			_ => throw new UnreachableException()
+		};
+		return $"{Left} {opStr} {Right}";
+	}
 }

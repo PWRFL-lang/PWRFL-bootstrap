@@ -39,6 +39,7 @@ public static class Types
 		KeyValuePair.Create(Int32, Char),
 		KeyValuePair.Create(Char, Int32),
 		KeyValuePair.Create(Int32, Byte),
+		KeyValuePair.Create(Byte, Int32),
 	}.ToLookup(kvp => kvp.Key, kvp => kvp.Value);
 
 	public static bool IsCompatible(IType l, IType r)

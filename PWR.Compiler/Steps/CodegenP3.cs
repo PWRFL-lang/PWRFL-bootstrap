@@ -42,7 +42,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	public override Project Run(Project tree)
 	{
 		_builder = new(_context);
-		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType, () => _currentFunc);
+		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType, () => _currentFunc, () => _isCtor);
 
 		LoadStdlib();
 		LoadImports(tree);
@@ -282,11 +282,14 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 
 		if (node.IsConstructor) {
 			_isCtor = true;
-			_locals.Add("self", LookupType(node.Semantic!.Type).Undef);
+			var selfType = LookupType(node.Semantic!.Type);
+			var selfPtr = _builder.Handle.BuildAlloca(selfType, "self");
+			_locals.Add("self", selfPtr);
+			_builder.Handle.BuildStore(LLVM.ConstNull(selfType), selfPtr);
 		}
 		Visit(node.Body);
 		if (_isCtor) {
-			_builder.Handle.BuildRet(_locals["self"]);
+			_builder.Handle.BuildRet(_builder.Handle.BuildLoad2(LookupType(node.Semantic!.Type), _locals["self"], "result"));
 		} else if (node.Body.Length == 0 || node.Body[^1] is not ReturnStatement) {
 			if ((node.ReturnType?.Semantic?.Type ?? Types.Void) == Types.Void) {
 				_builder.Handle.BuildRetVoid();
@@ -663,6 +666,10 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				result = _builder.Handle.BuildInsertValue(result, args[0], 1, "span.len");
 				_values.Push(result);
 				break;
+			case "$print":
+				var (funcType, func) = _functions["Console$PrintLn"];
+				_values.Push(_builder.Handle.BuildCall2(funcType, func, args, ""));
+				break;
 			default:
 				throw new NotImplementedException();
 		}
@@ -862,6 +869,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (type == targetType) {
 			return expr;
 		}
+		if (targetType is NilableType nt) {
+			return BuildCast(type, nt.BaseType, expr, typ);
+		}
 		if (type is PrimitiveType && targetType is PrimitiveType) {
 			return _builder.Handle.BuildIntCast(expr, typ, "cast");
 		}
@@ -877,6 +887,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			return expr;
 		}
 		if (type == Types.Nil && targetType is TypeSystem.PointerType) {
+			return expr;
+		}
+		if (type is TypeSystem.PointerType && targetType is RefType) {
 			return expr;
 		}
 		if (type is SpanType st) {

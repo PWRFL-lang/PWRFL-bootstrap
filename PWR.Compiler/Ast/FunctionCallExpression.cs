@@ -16,4 +16,6 @@ public class FunctionCallExpression(Expression target, Expression[] args) : Expr
 
 	public override void Accept(IVisitor visitor) => visitor.VisitFunctionCallExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitFunctionCallExpression(this);
+
+	public override string ToString() => $"{Target}({string.Join(", ", Args)})";
 }

@@ -1,5 +1,5 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
+using System.Linq;
 
 using PWR.Compiler.Ast;
 using PWR.Compiler.Metadata;
@@ -44,7 +44,11 @@ public class SetupStandardLibraryP3(string[]? imports, bool skipStdLib, string[]
 	private void SetupImports(Project tree)
 	{
 		if (!skipStdLib) {
-			tree.Imports.Add(Import("pwr.dll"));
+			var stdlib = Import("pwr.dll");
+			tree.Imports.Add(stdlib);
+			// ensure that the Console type is loaded, so that "print" will work correctly
+			// TODO: Fix this once macros are implemented
+			stdlib.Types.First(t => t.Name == "Console").GetMember("");
 		}
 		if (imports != null) {
 			foreach (var imp in imports) {

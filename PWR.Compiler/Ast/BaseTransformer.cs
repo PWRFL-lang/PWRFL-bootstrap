@@ -271,7 +271,7 @@ public class BaseTransformer : ITransformer
 	{
 		var l = VisitExpression(node.Left)!;
 		var r = VisitExpression(node.Right)!;
-		return (l == node.Left && r == node.Right) ? node : new ComparisonExpression(l, r, node.Operator);
+		return (l == node.Left && r == node.Right) ? node : node.With(l, r);
 	}
 
 	public virtual Node? VisitTernaryExpression(TernaryExpression node)
@@ -281,7 +281,7 @@ public class BaseTransformer : ITransformer
 		var r = VisitExpression(node.Right)!;
 		return (cond == node.Cond && l == node.Left && r == node.Right)
 			? node
-			: new TernaryExpression(node.Position, cond, l, r);
+			: node.With(cond, l, r);
 	}
 
 	public virtual Node? VisitMatchExpression(MatchExpression node)

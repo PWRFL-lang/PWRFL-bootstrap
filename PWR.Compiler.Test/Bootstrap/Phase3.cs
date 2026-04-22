@@ -23,16 +23,21 @@ internal class Phase3
 		Directory.CreateDirectory(_tempFolder);
 		var filename = Directory.EnumerateFiles(".\\Code", "pwr*.pwrfl").OrderByDescending(f => f).First();
 		var memManager = Directory.EnumerateFiles(".\\Code", "mem*.pwrfl").OrderByDescending(f => f).First();
-		var options = new CompileOptions(
-			[CodeSource.FromFile(filename), CodeSource.FromFile(memManager)],
-			Path.Combine(_tempFolder, "pwr.dll"), 
-			[],
-			ProjectType: ProjectType.Library,
-			NoStdLib: true
-		);
-		var result = _compiler.Compile(options);
-		Assert.That(result is BuildCompileResult);
-		_runtime = ((BuildCompileResult)result).Filename;
+		string[] inputs = [filename, memManager];
+		var latestChange = inputs.Max(File.GetLastWriteTime);
+		var runtimeFilename = Path.Combine(_tempFolder, "pwr.dll");
+		if (latestChange > File.GetLastWriteTime(runtimeFilename)) {
+			var options = new CompileOptions(
+				[CodeSource.FromFile(filename), CodeSource.FromFile(memManager)],
+				runtimeFilename,
+				[],
+				ProjectType: ProjectType.Library,
+				NoStdLib: true
+			);
+			var result = _compiler.Compile(options);
+			Assert.That(result is BuildCompileResult);
+			_runtime = ((BuildCompileResult)result).Filename;
+		}
 	}
 
 	private void RunTest(string code, string expected)
@@ -162,4 +167,62 @@ internal class Phase3
 		Console.Print(m.X.ToString())
 		""",
 		"5");
+
+	[Test]
+	public void Alloc() => RunTest("""
+		var block = Memory.Alloc(64)
+		; write something to it
+		block[0] = 42
+		; verify we can read it back
+		print block[0].ToString()
+		; free it
+		Memory.Free(block)
+		""",
+		"42\r\n");
+
+	[Test]
+	public void AllocMulti() => RunTest("""
+		let a = Memory.Alloc(16)
+		let b = Memory.Alloc(16)
+		let c = Memory.Alloc(16)
+		; verify they don't overlap
+		a[0] = 1
+		b[0] = 2
+		c[0] = 3
+		print a[0].ToString()  ; 1
+		print b[0].ToString()  ; 2
+		print c[0].ToString()  ; 3
+		Memory.Free(a)
+		Memory.Free(b)
+		Memory.Free(c)
+		""",
+		"""
+		1
+		2
+		3
+
+		""");
+
+	[Test]
+	public void AllocSizeClasses() => RunTest("""
+		let small = Memory.Alloc(16)    ; size class 0
+		let large = Memory.Alloc(256)   ; size class 15
+		let huge = Memory.Alloc(512)    ; large block path
+		small[0] = 1
+		large[0] = 2
+		huge[0] = 3
+		print small[0].ToString()
+		print large[0].ToString()
+		print huge[0].ToString()
+		Memory.Free(small)
+		Memory.Free(large)
+		Memory.Free(huge)
+		""",
+		"""
+		1
+		2
+		3
+
+		""");
+		
 }

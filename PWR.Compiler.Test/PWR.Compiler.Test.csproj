@@ -34,7 +34,7 @@
 
   <ItemGroup>
     <None Update="Code\mem.pwrfl">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Code\pwr.pwrfl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -280,6 +280,11 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	public override void VisitComparisonExpression(ComparisonExpression node)
 	{
 		base.VisitComparisonExpression(node);
+		var lType = GetType(node.Left);
+		var rType = GetType(node.Right);
+		if (lType != rType) {
+			node.Right.Annotate("cast", lType);
+		}
 		node.Semantic = new Comparison(node);
 	}
 

@@ -92,6 +92,45 @@ module IntMethods extends int
 	end
 end
 
+module ByteMethods extends byte
+	def byteMagnitude(i: byte): int
+		return if i >= 100 then 3 else 1 + ord(i >= 10)
+	end
+
+	def doByteToStr(value: int, mag: int, result: char span)
+		for i in range(mag - 1, 0, -1)
+			let digit = value % 10
+			result[i] = '0' + digit
+			value //= 10
+		end
+	end
+
+	def byteToStrPos(i: byte): string
+		let mag = byteMagnitude(i)
+		var result = new char[mag]
+		doByteToStr(i, mag, result)
+		return new string(result)
+	end
+
+	def byteToStrNeg(i: byte): string
+		let mag = byteMagnitude(i)
+		var result = new char[mag + 1]
+		result[0] = '-'
+		doByteToStr(i, mag, result[1..])
+		return new string(result)
+	end
+
+	def ToString(self: byte): string
+		return if self < 0 then byteToStrNeg(-self) else byteToStrPos(self)
+	end
+end
+
+module BoolMethods extends bool
+	def ToString(self: bool): string
+		return if self then "true" else "false"
+	end
+end
+
 def _DllMainCRTStartup(instance: ptr, reason: int, reserved: ptr): int
 	return 1
 end

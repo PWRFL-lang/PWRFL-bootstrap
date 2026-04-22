@@ -19,6 +19,7 @@ struct Allocator
 			sc[i].FreeList = nil
 			sc[i].PoolUsed = 0
 		end
+		self.SmallClasses = sc
 	end
 end
 

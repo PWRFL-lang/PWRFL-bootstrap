@@ -17,7 +17,8 @@ internal class LValueVisitor(
 	Dictionary<string, LLVMValueRef> locals, 
 	Dictionary<string, LLVMValueRef> globals,
 	Func<IType, LLVMTypeRef> lookupType,
-	Func<LLVMValueRef> currentFunc) : IVisitor
+	Func<LLVMValueRef> currentFunc,
+	Func<bool> isCtor) : IVisitor
 {
 	internal void Visit(Node node) => node.Accept(this);
 
@@ -214,5 +215,5 @@ internal class LValueVisitor(
 
 	public void VisitWhileStatement(WhileStatement node) => throw new NotImplementedException();
 
-	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => values.Push(currentFunc().FirstParam);
+	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => values.Push(isCtor() ? locals["self"] : currentFunc().FirstParam);
 }
