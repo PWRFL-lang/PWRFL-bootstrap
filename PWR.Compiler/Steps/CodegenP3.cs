@@ -892,20 +892,25 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (type is TypeSystem.PointerType && targetType is RefType) {
 			return expr;
 		}
-		if (type is SpanType st) {
+		if (type is SpanType) {
 			var span = _builder.Handle.BuildExtractValue(expr, 0, "spanData");
+			// the cast reinterprets the span's memory as the target.  If the target is already a ref
+			// (eg. cast span: foo ref), the pointer type is that ref.  Otherwise wrap the type in a ref.
+			var refType = targetType is RefType ? targetType : RefType.Create(targetType);
 			return _builder.Handle.BuildPointerCast(
 				_builder.Handle.BuildGEP2(_context.Handle.Int8Type, span, [LLVM.ConstInt(_context.Handle.Int32Type, 0, 0)], []),
-				LookupType(RefType.Create(targetType)));
+				LookupType(refType));
 		}
 		throw new NotImplementedException();
 	}
 
 	public override void VisitRefExpression(RefExpression node)
 	{
-		switch (node.Expr.Semantic) {
-			case VariableDecl vd:
-				_values.Push(_locals[vd.Name]);
+		var sem = node.Expr.Semantic;
+		switch (sem) {
+			case VariableDecl:
+			case ParamDef:
+				_values.Push(_locals[sem.Name]);
 				break;
 			default:
 				throw new NotImplementedException();

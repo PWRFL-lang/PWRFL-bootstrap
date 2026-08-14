@@ -45,4 +45,5 @@ public record CompileOptions(
 	string[]? Imports = null,
 	CompileType CompileType = CompileType.File,
 	ProjectType ProjectType = ProjectType.Executable,
-	bool NoStdLib = false);
+	bool NoStdLib = false,
+	bool EmitLlvmIr = false);

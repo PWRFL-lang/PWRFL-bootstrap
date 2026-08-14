@@ -44,6 +44,9 @@ public static class Types
 
 	public static bool IsCompatible(IType l, IType r)
 	{
+		if (l == r) {
+			return true;
+		}
 		if (_compatibleTypes.Contains(l) && _compatibleTypes[l].Contains(r)) { 
 			return true;
 		}

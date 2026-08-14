@@ -59,7 +59,13 @@ internal class LValueVisitor(
 			case ParamDef:
 			case VariableDecl:
 				var ptr = locals[node.Semantic.Name];
-				values.Push(node.Parent.Type == NodeType.MemberIdentifier ? ptr : builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name));
+				if (node.Parent.Type == NodeType.MemberIdentifier) {
+					values.Push(IsRef(node.Semantic.Type) 
+						? builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name)
+						: ptr);
+				} else { 
+					values.Push(builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name));
+				}
 				break;
 			case GlobalFieldDecl gf:
 				ptr = globals[node.Semantic.FullName];
@@ -83,6 +89,12 @@ internal class LValueVisitor(
 			values.Push(builder.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
 		}
 	}
+
+	private static bool IsRef(IType type) => type switch {
+		NilableType nt => IsRef(nt.BaseType),
+		RefType or PointerType => true,
+		_ => false
+	};
 
 	public void VisitIfStatement(IfStatement node) => throw new NotImplementedException();
 

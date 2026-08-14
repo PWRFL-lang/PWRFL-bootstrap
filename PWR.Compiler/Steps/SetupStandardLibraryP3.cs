@@ -46,9 +46,10 @@ public class SetupStandardLibraryP3(string[]? imports, bool skipStdLib, string[]
 		if (!skipStdLib) {
 			var stdlib = Import("pwr.dll");
 			tree.Imports.Add(stdlib);
-			// ensure that the Console type is loaded, so that "print" will work correctly
-			// TODO: Fix this once macros are implemented
+			// ensure that the Console and Memory modules are loaded, so that "print" and "new" will work correctly
+			// TODO: remove the Console hack once macros are implemented
 			stdlib.Types.First(t => t.Name == "Console").GetMember("");
+			stdlib.Types.First(t => t.Name == "Memory").GetMember("");
 		}
 		if (imports != null) {
 			foreach (var imp in imports) {

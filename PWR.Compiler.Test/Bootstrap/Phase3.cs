@@ -204,6 +204,39 @@ internal class Phase3
 		""");
 
 	[Test]
+	public void AllocReuse() => RunTest("""
+		; In the future, this should be a compile error because `a` becomes invalid after the call to Free
+		; but for the moment it's useful as a test.
+		let a = Memory.Alloc(16)
+		Memory.Free(a)
+		let b = Memory.Alloc(16)
+		; b should be the same block as a was
+		Console.Print((a.ToPtr() == b.ToPtr()).ToString())
+		""",
+		"true");
+
+	[Test]
+	public void AllocReuse2() => RunTest("""
+		let a = Memory.Alloc(16)
+		a[8] = 123
+		a[9] = 46
+		a[10] = 1
+		Memory.Free(a)
+		let b = Memory.Alloc(16)
+		; b should be the same block as a was
+		print(b[8].ToString())
+		print(b[9].ToString())
+		print(b[10].ToString())
+		""",
+		"""
+		123
+		46
+		1
+
+		""");
+		
+
+	[Test]
 	public void AllocSizeClasses() => RunTest("""
 		let small = Memory.Alloc(16)    ; size class 0
 		let large = Memory.Alloc(256)   ; size class 15

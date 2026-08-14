@@ -40,7 +40,6 @@ public class CompilePipelineP3
 		foreach (var step in _steps) {
 			tree = step.Run(tree);
 		}
-		var s = _module.PrintToString();
 		_module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 		return tree;
 	}
@@ -58,6 +57,9 @@ public class CompilePipelineP3
 
 	private CompileResult BuildResult(Project tree, Stopwatch sw)
 	{
+		if (_options.EmitLlvmIr) {
+			File.WriteAllText(_options.OutputFilename + ".ll", _module.PrintToString());
+		}
 		if (_options.CompileType == CompileType.Jit) {
 			LLVM.LinkInMCJIT();
 			var engine = _module.CreateExecutionEngine();
