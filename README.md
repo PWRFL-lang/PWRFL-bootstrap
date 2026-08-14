@@ -23,8 +23,14 @@ At the completion of each phase other than the first, (because this repo was not
   * Implement FFI (foreign function interface)
   * Use FFI to implement output printing via importing `puts` from libc
   * Demonstrate working FFI by printing Hello World to the console with `puts`
-* Phase 3 (in progress):
+* Phase 3:
   * Build working shared libraries
   * Create a simple runtime with no dependencies on libc
   * Add self-describing metadata to shared libraries, so that PWRFL code can import from these libraries with no need for external files to describe them
   * Demonstrate a working runtime by porting existing tests from Phase 1
+* Phase 4 (in progress):
+  * With a working allocator, implement dynamic data types
+    * Dynamic arrays
+    * Collections
+    * Classes
+    * Interfaces

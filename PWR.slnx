@@ -3,6 +3,9 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
   <Project Path="PWR.Compiler.Test/PWR.Compiler.Test.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>

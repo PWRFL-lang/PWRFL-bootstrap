@@ -1,5 +1,8 @@
 ﻿using System.Collections.Generic;
 
+using PWR.Compiler.Ast;
+using PWR.Compiler.Semantics;
+
 namespace PWR.Compiler.TypeSystem;
 
 public class ArrayType : IType, ICollectionType
@@ -17,6 +20,22 @@ public class ArrayType : IType, ICollectionType
 			result = new ArrayType(baseType);
 			_cache.Add(baseType, result);
 		}
+		return result;
+	}
+
+	private static readonly Dictionary<string, ISemantic> _members = new() {
+		{ "Length",
+			new MagicProperty(
+				"Length",
+				"arr$Length",
+				new SimpleTypeReference(default, "int") { Semantic = new TypeRef(Types.Int32) }
+			)
+		},
+	};
+
+	ISemantic? IType.GetMember(string name)
+	{
+		_members.TryGetValue(name, out var result);
 		return result;
 	}
 }
