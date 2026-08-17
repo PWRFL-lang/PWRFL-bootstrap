@@ -21,6 +21,12 @@ public static class Types
 		Ptr = new PointerType();
 		Nil = new PointerType();
 		BuildCompatibleTypes();
+
+		//Clear composite type caches in case this is a second build
+		ArrayType.ClearCache();
+		NilableType.ClearCache();
+		RefType.ClearCache();
+		SpanType.ClearCache();
 	}
 
 	public static IType Void { get; private set; } = null!;

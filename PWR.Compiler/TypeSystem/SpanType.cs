@@ -46,4 +46,6 @@ public class SpanType : IType, ICollectionType
 		}
 		return result;
 	}
+
+	internal static void ClearCache() => _cache.Clear();
 }

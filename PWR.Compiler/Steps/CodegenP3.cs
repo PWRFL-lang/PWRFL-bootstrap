@@ -55,31 +55,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		return result;
 	}
 
-	[LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
-	public static partial IntPtr GetModuleHandle([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
-
 	private void LoadStdlib()
 	{
 		_mainType = LLVMTypeRef.CreateFunction(_context.Handle.VoidType, []);
-
-		var callocType = LLVMTypeRef.CreateFunction(
-			LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0),
-			[_context.Handle.Int64Type, _context.Handle.Int64Type]
-		);
-		_functions.Add("calloc", (callocType, _module.AddFunction("calloc", callocType)));
-		using var str2 = new MarshaledString("calloc");
-		var callocAddr = NativeLibrary.GetExport(GetModuleHandle("msvcrt.dll"), "calloc");
-		LLVM.AddSymbol(str2, (void*)callocAddr);
-
-		var mallocType = LLVMTypeRef.CreateFunction(
-			LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0),
-			[_context.Handle.Int64Type]
-		);
-		_functions.Add("malloc", (mallocType, _module.AddFunction("malloc", mallocType)));
-		using var str3 = new MarshaledString("malloc");
-		var mallocAddr = NativeLibrary.GetExport(GetModuleHandle("msvcrt.dll"), "malloc");
-		LLVM.AddSymbol(str3, (void*)mallocAddr);
-
 
 		var bytesType = LLVMTypeRef.CreateArray(_context.Handle.Int8Type, 0);
 		Debug.Assert(bytesType.Context.Handle == _module.Context.Handle);
@@ -91,23 +69,34 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_builtinTypes.Add("string", stringType);
 
 		_builtinTypes.Add("ptr", LLVMTypeRef.CreatePointer(_context.Handle.VoidType, 0));
+	}
 
-		/*
-		var memcpyType = LLVMTypeRef.CreateFunction(
-			_context.Handle.VoidType,
-			[
-				LLVMTypeRef.CreatePointer(_context.Handle.Int8Type, 0), // dest
-				LLVMTypeRef.CreatePointer(_context.Handle.Int8Type, 0), // src
-				_context.Handle.Int64Type,                              // size
-				_context.Handle.Int1Type                                // isVolatile
-			],
-			false
-		);
-		var memcpy = _module.GetNamedFunction("llvm.memcpy.p0.p0.i64");
-		if (memcpy.Handle == default)
-			memcpy = _module.AddFunction("llvm.memcpy.p0.p0.i64", memcpyType);
-		_functions.Add("memcpy", (memcpyType, memcpy));
-		*/
+	private readonly HashSet<string> _forwardDeclared = [];
+
+	private (LLVMTypeRef Type, LLVMValueRef Function) GetAllocFunc()
+	{
+		const string name = "Memory$Alloc";
+		if (!_functions.TryGetValue(name, out var result)) {
+			var type = LLVMTypeRef.CreateFunction(LookupType(SpanType.Create(Types.Byte)), [_context.Handle.Int32Type], false);
+			result = (type, _module.AddFunction(name, type));
+			_functions.Add(name, result);
+			_forwardDeclared.Add(name);
+		}
+		return result;
+	}
+
+	private (LLVMTypeRef Type, LLVMValueRef Function) GetReallocFunc()
+	{
+		const string name = "Memory$Realloc";
+		if (!_functions.TryGetValue(name, out var result))
+		{
+			var byteSpan = LookupType(SpanType.Create(Types.Byte));
+			var type = LLVMTypeRef.CreateFunction(byteSpan, [byteSpan, _context.Handle.Int32Type], false);
+			result = (type, _module.AddFunction(name, type));
+			_functions.Add(name, result);
+			_forwardDeclared.Add(name);
+		}
+		return result;
 	}
 
 	private void LoadImports(Project tree)
@@ -266,8 +255,13 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			return;
 		}
 		var name = _namespaces.Count == 0 ? node.Name.Name : string.Join('$', _namespaces.Reverse()) + '$' + node.Name.Name;
-		var func = _module.AddFunction(name, funcType);
-		_functions.Add(name, (funcType, func));
+		LLVMValueRef func;
+		if (_forwardDeclared.Remove(name)) {
+			func = _functions[name].Function; 
+		} else {
+			func = _module.AddFunction(name, funcType);
+			_functions.Add(name, (funcType, func));
+		}
 		_currentFunc = func;
 		_locals.Clear();
 
@@ -508,6 +502,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Visit(node.Right);
 		Debug.Assert(_values.Count == 1);
 		var r = _values.Pop();
+		var cf = _currentFunc.ToString();
 		_lValueVisitor.Visit(node.Left);
 		Debug.Assert(_values.Count == 1);
 		var l = _values.Pop();
@@ -670,9 +665,42 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				var (funcType, func) = _functions["Console$PrintLn"];
 				_values.Push(_builder.Handle.BuildCall2(funcType, func, args, ""));
 				break;
+			case "arr$Resize":
+				VisitArrayResize(node, args[0]);
+				break;
 			default:
 				throw new NotImplementedException();
 		}
+	}
+
+	private void VisitArrayResize(FunctionCallExpression node, LLVMValueRef newLen)
+	{
+		var target = (MemberIdentifier)node.Target;
+		var arrType = (TypeSystem.ArrayType)target.ParentExpr.Semantic!.Type;
+		var arrSpanType = LookupType(arrType);
+		var elemSize = LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, SizeOf(LookupType(arrType.BaseType)));
+
+		_lValueVisitor.Visit(target.ParentExpr);
+		var arrPtr = _values.Pop();
+		var oldSpan = _builder.Handle.BuildLoad2(arrSpanType, arrPtr, "oldArr");
+		var oldData = _builder.Handle.BuildExtractValue(oldSpan, 0, "oldData");
+		var oldLen = _builder.Handle.BuildExtractValue(oldSpan, 1, "oldLen");
+		var oldBytes = _builder.Handle.BuildMul(oldLen, elemSize, "oldBytes");
+		var newBytes = _builder.Handle.BuildMul(newLen, elemSize, "newBytes");
+
+		//reinterpret current storage as a byte span and realloc it
+		var byteSpanType = LookupType(SpanType.Create(Types.Byte));
+		var oldByteSpan = byteSpanType.Undef;
+		oldByteSpan = _builder.Handle.BuildInsertValue(oldByteSpan, oldData, 0);
+		oldByteSpan = _builder.Handle.BuildInsertValue(oldByteSpan, oldBytes, 1);
+		var realloc = GetReallocFunc();
+		var newByteSpan = _builder.Handle.BuildCall2(realloc.Type, realloc.Function, [oldByteSpan, newBytes]);
+		var newData = _builder.Handle.BuildExtractValue(newByteSpan, 0, "newData");
+
+		var newSpan = arrSpanType.Undef;
+		newSpan = _builder.Handle.BuildInsertValue(newSpan, newData, 0);
+		newSpan = _builder.Handle.BuildInsertValue(newSpan, newLen, 1);
+		_values.Push(_builder.Handle.BuildStore(newSpan, arrPtr));
 	}
 
 	private void VisitMagicPropertyCall(MagicProperty mp, LLVMValueRef parent)
@@ -680,6 +708,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		switch (mp.FullName) {
 			case "span$Length":
 				_values.Push(_builder.Handle.BuildExtractValue(parent, 1, "spanLength"));
+				break;
+			case "arr$Length":
+				_values.Push(_builder.Handle.BuildExtractValue(parent, 1, "arrLength"));
 				break;
 			default:
 				throw new NotImplementedException();
@@ -806,8 +837,8 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		Debug.Assert(_values.Count == count + 1);
 		var idx = _values.Pop();
 		var parentType = LookupType(expr.ParentExpr.Semantic!.Type);
-		LLVMValueRef zero = LLVM.ConstInt(module.Context.Int32Type, 0, 0);
-		LLVMValueRef fieldIdx = LLVM.ConstInt(module.Context.Int32Type, (ulong)fd.Index, 0);
+		LLVMValueRef zero = LLVM.ConstInt(_module.Context.Int32Type, 0, 0);
+		LLVMValueRef fieldIdx = LLVM.ConstInt(_module.Context.Int32Type, (ulong)fd.Index, 0);
 		var result = _builder.Handle.BuildGEP2(parentType, parent, [zero, fieldIdx, idx], "index".AsSpan());
 		result = _builder.Handle.BuildLoad2(elType, result, "element");
 		_values.Push(result);
@@ -919,18 +950,19 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 
 	public override void VisitNewArrayExpression(NewArrayExpression node)
 	{
-		var typeLen = LLVMValueRef.CreateConstInt(_context.Handle.Int64Type, SizeOf(LookupType(node.ArrayType)));
+		var elemType = LookupType(node.ArrayType);
+		var elemSize = LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, SizeOf(elemType));
 		var count = _values.Count;
 		Visit(node.Size);
 		Debug.Assert(_values.Count == count + 1);
 		var arrayLen = _values.Pop();
-		var arrayLen64 = _builder.Handle.BuildIntCast(arrayLen, _context.Handle.Int64Type);
-		var calloc = _functions["calloc"];
-		var call = _builder.Handle.BuildCall2(calloc.Type, calloc.Function, [typeLen, arrayLen64]);
-		var cast = _builder.Handle.BuildBitCast(call, LLVMTypeRef.CreatePointer(LookupType(node.ArrayType), 0));
+		var byteLen = _builder.Handle.BuildMul(arrayLen, elemSize, "byteLen");
+		var alloc = GetAllocFunc();
+		var block = _builder.Handle.BuildCall2(alloc.Type, alloc.Function, [byteLen]);
+		var data = _builder.Handle.BuildExtractValue(block, 0, "allocData");
 		var spanType = LookupType(node.Semantic!.Type);
 		var span = spanType.Undef;
-		span = _builder.Handle.BuildInsertValue(span, cast, 0);
+		span = _builder.Handle.BuildInsertValue(span, data, 0);
 		span = _builder.Handle.BuildInsertValue(span, arrayLen, 1);
 		_values.Push(span);
 	}
@@ -952,9 +984,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		var span = _values.Pop();
 		var len = _builder.Handle.BuildExtractValue(span, 1, "spanLen");
 		var typeLen = _builder.Handle.BuildAdd(len, LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, 5));
-		var typeLen64 = _builder.Handle.BuildIntCast(typeLen, _context.Handle.Int64Type);
-		var malloc = _functions["malloc"];
-		var strPtr = _builder.Handle.BuildCall2(malloc.Type, malloc.Function, [typeLen64]);
+		var alloc = GetAllocFunc();
+		var block = _builder.Handle.BuildCall2(alloc.Type, alloc.Function, [typeLen]);
+		var strPtr = _builder.Handle.BuildExtractValue(block, 0, "strData");
 		var stringType = _builtinTypes["string"];
 		var lenPtr = _builder.Handle.BuildGEP2(stringType, strPtr, [
 				LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, 0, false),
@@ -969,7 +1001,6 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			"dataPtr".AsSpan());
 		var memcpy = _functions["memcpy"];
 		var data = _builder.Handle.BuildExtractValue(span, 0, "data"); // i8*
-		//var len64 = _builder.Handle.BuildZExt(len, _context.Handle.Int64Type, "len64");  
 		_builder.Handle.BuildCall2(memcpy.Type, memcpy.Function, [
 				dataPtrPtr, // dest
 				data,        // src

@@ -24,14 +24,14 @@ internal class Phase4
 		string[] inputs = [filename, memManager];
 		var latestChange = inputs.Max(File.GetLastWriteTime);
 		var runtimeFilename = Path.Combine(_tempFolder, "pwr.dll");
-		if (latestChange > File.GetLastWriteTime(runtimeFilename))
-		{
+		if (latestChange > File.GetLastWriteTime(runtimeFilename)) {
 			var options = new CompileOptions(
 				[CodeSource.FromFile(filename), CodeSource.FromFile(memManager)],
 				runtimeFilename,
 				[],
 				ProjectType: ProjectType.Library,
 				NoStdLib: true
+				//, EmitLlvmIr: true
 			);
 			var result = _compiler.Compile(options);
 			Assert.That(result is BuildCompileResult);
@@ -45,10 +45,10 @@ internal class Phase4
 			[CodeSource.FromText(code)],
 			Path.Combine(_tempFolder, "test.exe"),
 			[_tempFolder]
+			//, EmitLlvmIr: true
 		);
 		var cr = _compiler.Compile(options);
-		if (cr is not BuildCompileResult { Filename: { } filename })
-		{
+		if (cr is not BuildCompileResult { Filename: { } filename }) {
 			Assert.Fail("Build failed: " + ((ErrorCompileResult)cr).Error);
 			// this won't be hit because Assert.Fail throws, but the C# compiler requires it
 			// for definite assignment analysis of `filename` below

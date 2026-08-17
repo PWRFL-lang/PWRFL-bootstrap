@@ -145,6 +145,7 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 				"$print" => new TypeRef(Types.Int32),
 				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
 				"ptr$AsSpan" or "ref$AsSpan" => new TypeRef(mf.Type),
+				"arr$Resize" => new TypeRef(Types.Void),
 				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
 			};
 		}
@@ -231,8 +232,11 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		base.VisitAssignStatement(node);
 		var lType = GetType(node.Left);
 		var rType = GetType(node.Right);
-		if (lType != rType && !Types.IsCompatible(lType, rType)) {
-			throw new CompileError(node, $"A value of type '{rType}' cannot be assigned to a variable of type '{lType}'");
+		if (lType != rType) {
+			if (!Types.IsCompatible(lType, rType)) {
+				throw new CompileError(node, $"A value of type '{rType}' cannot be assigned to a variable of type '{lType}'");
+			}
+			node.Right.Annotate("cast", lType);
 		}
 	}
 

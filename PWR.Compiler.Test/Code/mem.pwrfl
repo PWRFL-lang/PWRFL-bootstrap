@@ -31,6 +31,12 @@ module Memory
 		return ((size + 15) // 16) - 1
 	end
 
+	def set(mem: byte span, value: byte)
+		for i in range(0, mem.Length)
+			mem[i] = value
+		end
+	end
+
 	def Alloc(size: int): byte span
 		if size <= 256
 			let classIndex = getSizeClass(size)
@@ -41,7 +47,10 @@ module Memory
 				let block = sc.FreeList
 				sc.FreeList = block.Next
 				allocator.SmallClasses[classIndex] = sc
-				return block.AsSpan(sc.BlockSize)
+				; zero out reused memory
+				var result = block.AsSpan(sc.BlockSize)
+				set (result, 0)
+				return result
 			end
 
 			; refill pool if exhausted
@@ -50,7 +59,7 @@ module Memory
 				sc.PoolUsed = 0
 			end
 
-			; carve from pool
+			; carve from pool (new pages are already zeroed)
 			let offset = sc.PoolUsed
 			sc.PoolUsed += sc.BlockSize
 			allocator.SmallClasses[classIndex] = sc
@@ -73,5 +82,17 @@ module Memory
 		else
 			Kernel32.FreeMem(block)
 		end
+	end
+
+	def Realloc(block: byte span, newSize: int): byte span
+		if newSize == block.Length
+			return block
+		end
+		; simple strategy: allocate a new block, copy the overlapping bytes, then Free the old one
+		var newBlock = Alloc(newSize)
+		let copyLen = if block.Length < newBlock.Length then block.Length else newBlock.Length
+		memcpy(newBlock.ToPtr(), block.ToPtr(), copyLen)
+		Free(block)
+		return newBlock
 	end
 end

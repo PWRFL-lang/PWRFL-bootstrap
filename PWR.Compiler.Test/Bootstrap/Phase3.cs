@@ -223,15 +223,15 @@ internal class Phase3
 		a[10] = 1
 		Memory.Free(a)
 		let b = Memory.Alloc(16)
-		; b should be the same block as a was
+		; b is the same block as a was, but the data should be zeroed
 		print(b[8].ToString())
 		print(b[9].ToString())
 		print(b[10].ToString())
 		""",
 		"""
-		123
-		46
-		1
+		0
+		0
+		0
 
 		""");
 		

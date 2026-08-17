@@ -47,5 +47,7 @@ public class RefType : IType
 		return result;
 	}
 
+	internal static void ClearCache() => _cache.Clear();
+
 	public override string ToString() => Name;
 }
