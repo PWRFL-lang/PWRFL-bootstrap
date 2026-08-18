@@ -600,7 +600,6 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
 		RefType rt => LLVMTypeRef.CreatePointer(LookupType(rt.BaseType), 0),
 		InternalStruct ist => _customTypes[ist.Name],
-		InternalClass icl => _customTypes[icl.Name],
 		NilableType nt => LookupType(nt.BaseType),
 		_ => throw new NotImplementedException()
 	};

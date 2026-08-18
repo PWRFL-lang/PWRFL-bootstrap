@@ -17,6 +17,44 @@ public class CompilePipelineP3
 	private readonly LLVMModuleRef _module;
 	private readonly CompileOptions _options;
 
+	private const string NATVIS =
+"""
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://microsoft.com/schemas/vstudio/debugger/natvis/2010">
+	<Type Name="string">
+		<DisplayString>{bytes,[len]s8}</DisplayString>
+		<StringView>bytes,[len]s8</StringView>
+		<Expand>
+			<Item Name="[length]">len</Item>
+			<ArrayItems>
+				<Size>len</Size>
+				<ValuePointer>bytes</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+	<Type Name="* span">
+		<DisplayString>{{ length={length} }}</DisplayString>
+		<Expand>
+			<Item Name="[length]">length</Item>
+			<ArrayItems>
+				<Size>length</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+	<Type Name="* array">
+		<DisplayString>{{ length={length} }}</DisplayString>
+		<Expand>
+			<Item Name="[length]">length</Item>
+			<ArrayItems>
+				<Size>length</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+</AutoVisualizer>
+""";
+
 	public CompilePipelineP3(CompileOptions options)
 	{
 		var context = new LLVMContext();
@@ -89,6 +127,9 @@ public class CompilePipelineP3
 			}
 			if (_options.DebugInfo) {
 				args += " /debug";
+				var natvis = filename + ".natvis";
+				File.WriteAllText(natvis, NATVIS);
+				args += $" /natvis:{natvis}";
 			}
 			args += " kernel32.lib ucrt.lib";
 			var process = Process.Start(
