@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,12 +18,18 @@ using PWR.Compiler.TypeSystem.Internal;
 
 namespace PWR.Compiler.Steps;
 
-public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module, string filename, bool isLibrary) : VisitorCompileStep
+public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module, string filename, bool isLibrary, bool debugInfo = false) : VisitorCompileStep
 {
 	private readonly LLVMContext _context = context;
 	private readonly LLVMModuleRef _module = module;
 	private readonly string _filename = filename;
 	private readonly bool _isLibrary = isLibrary;
+	private readonly bool _debugInfo = debugInfo; 
+	private LLVMDIBuilderRef _diBuilder = null!;
+	private LLVMMetadataRef _diCompileUnit;
+	private LLVMMetadataRef _diSubprogram; // subprogram of the function being emitted (default when in synthetic code)
+	private readonly Dictionary<string, LLVMMetadataRef> _diFiles = [];
+	private readonly Dictionary<IType, LLVMMetadataRef> _diTypes = [];
 	private IRBuilder _builder = null!;
 	private LValueVisitor _lValueVisitor = null!;
 	private readonly Stack<LLVMValueRef> _values = [];
@@ -45,6 +52,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_lValueVisitor = new(_module, _builder.Handle, _values, _locals, _globals, LookupType, () => _currentFunc, () => _isCtor);
 
 		LoadStdlib();
+		if (_debugInfo) {
+			InitDebugInfo();
+		}
 		LoadImports(tree);
 		WriteMetadata(tree);
 
@@ -52,7 +62,251 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (!_isLibrary) {
 			BuildProgramInit(tree.Imports);
 		}
+		if (_debugInfo) {
+			LLVM.DIBuilderFinalize(_diBuilder);
+		}
 		return result;
+	}
+
+	private void InitDebugInfo()
+	{
+		_diBuilder = _module.CreateDIBuilder();
+		_module.AddModuleFlag(
+			"Debug Info Version",
+			LLVMModuleFlagBehavior.LLVMModuleFlagBehaviorWarning,
+			LLVM.ValueAsMetadata(LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, 3)));
+		_module.AddModuleFlag(
+			"CodeView",
+			LLVMModuleFlagBehavior.LLVMModuleFlagBehaviorWarning,
+			LLVM.ValueAsMetadata(LLVMValueRef.CreateConstInt(_context.Handle.Int32Type, 1)));
+		_diCompileUnit = _diBuilder.CreateCompileUnit(
+			LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
+			GetDIFile(_filename), "PWRFL compiler", 0, "", 0, "",
+			LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0, "", "");
+	}
+
+	private LLVMMetadataRef GetDIFile(string filename)
+	{
+		if (string.IsNullOrEmpty(filename)) {
+			filename = _filename;
+		}
+		if (!_diFiles.TryGetValue(filename, out var file)) {
+			file = _diBuilder.CreateFile(Path.GetFileName(filename), Path.GetDirectoryName(filename) ?? ".");
+			_diFiles[filename] = file;
+		}
+		return file;
+	}
+
+	// Attach a DISubprogram to a real (source-backed) function and make it the current debug
+	// scope. Synthetic functions instead call ClearDebugScope
+	private void BeginDebugFunction(LLVMValueRef func, string name, Position pos)
+	{
+		if (!_debugInfo) {
+			return;
+		}
+		var file = GetDIFile(pos.File);
+		var line = (uint)Math.Max(pos.Line, 1);
+		var subType = _diBuilder.CreateSubroutineType(file, [], LLVMDIFlags.LLVMDIFlagZero);
+		_diSubprogram = _diBuilder.CreateFunction(_diCompileUnit, name, func.Name, file, line, subType,
+			IsLocalToUnit: 0, IsDefinition: 1, ScopeLine: line, LLVMDIFlags.LLVMDIFlagZero, IsOptimized: 0);
+		LLVM.SetSubprogram(func, _diSubprogram);
+		SetLocation(pos);
+	}
+
+	// Synthetic functions (runtimeMain, module/program init, implicit ctors) carry no debug info,
+	// so their instructions must have no location
+	private void ClearDebugScope()
+	{
+		if (!_debugInfo) {
+			return;
+		}
+		_diSubprogram = default;
+		LLVM.SetCurrentDebugLocation2(_builder.Handle, default);
+	}
+
+	private void SetLocation(Position pos)
+	{
+		if (!_debugInfo || _diSubprogram.Handle == default) {
+			return;
+		}
+		var loc = _context.Handle.CreateDebugLocation((uint)Math.Max(pos.Line, 1), (uint)(pos.Column + 1), _diSubprogram, default);
+		LLVM.SetCurrentDebugLocation2(_builder.Handle, loc);
+	}
+
+	// Statement granularity locations: every statement in a body/block flows through here, so the
+	// instructions it emits inherit its source position
+	public override void Visit<T>(T[]? list)
+	{
+		if (typeof(T).IsAssignableTo(typeof(Statement))) {
+			if (_debugInfo && _diSubprogram.Handle != default && list != null) {
+				foreach (var node in list) {
+					SetLocation(node.Position);
+					node.Accept(this);
+				}
+				return;
+			}
+		}
+		base.Visit(list);
+	}
+
+	// Emit a llvm.dbg.declare associating an alloca with a source variable so the debugger can
+	// inspect it. paramIndex > 0 marks a function parameter
+	private void DeclareLocal(LLVMValueRef storage, string name, IType type, Position pos, int paramindex)
+	{
+		if (!_debugInfo || _diSubprogram.Handle == default) {
+			return;
+		}
+		var diType = GetDIType(type);
+		if (diType.Handle == default) {
+			return;
+		}
+		var file = GetDIFile(pos.File);
+		var line = (uint)Math.Min(pos.Line, 1);
+		using var nameM = new MarshaledString(name);
+		var varInfo = paramindex > 0
+			? LLVM.DIBuilderCreateParameterVariable(_diBuilder, _diSubprogram, nameM, (nuint)nameM.Length, (uint)paramindex, file, line, diType, 1, LLVMDIFlags.LLVMDIFlagZero)
+			: LLVM.DIBuilderCreateAutoVariable(_diBuilder, _diSubprogram, nameM, (nuint)nameM.Length, file, line, diType, 1, LLVMDIFlags.LLVMDIFlagZero, 0);
+		var expr = LLVM.DIBuilderCreateExpression(_diBuilder, null, 0);
+		var loc = _context.Handle.CreateDebugLocation(line, (uint)(pos.Column + 1), _diSubprogram, default);
+		LLVM.DIBuilderInsertDeclareRecordAtEnd(_diBuilder, storage, varInfo, expr, loc, _builder.Handle.InsertBlock);
+	}
+
+	private ulong SizeInBits(LLVMTypeRef t) => SizeOf(t) * 8;
+
+	private ulong OffsetInBits(LLVMTypeRef structType, uint index)
+		=> LLVM.OffsetOfElement(new DataLayout(_module.DataLayout).Handle, structType, index) * 8;
+
+	private LLVMMetadataRef GetDIType(IType? type)
+	{
+		if (type == null || type == Types.Void) {
+			return default;
+		}
+		if (!_diTypes.TryGetValue(type, out var result)) {
+			result = type switch {
+				PrimitiveType pt => BasicDIType(pt),
+				NilableType nt => GetDIType(nt.BaseType),
+				RefType rt => PointerDIType(GetDIType(rt.BaseType), type.Name),
+				TypeSystem.PointerType => PointerDIType(default, type.Name),
+				StringType => PointerDIType(StringStructDIType(), "string"),
+				SpanType st => SpanDIType(type, st.BaseType),
+				TypeSystem.ArrayType at => SpanDIType(type, at.BaseType),
+				InternalStruct ist => StructDIType(type, ist),
+				InlineArrayType ia => InlineArrayDIType(ia),
+				_ => throw new NotImplementedException(),
+			};
+			_diTypes[type] = result;
+		}
+		return result;
+	}
+
+	// DWARF base-type encodings (DWARF 5 spec, table 7:11).  LLVM-C takes a raw unsigned here, so
+	// these aren't available as an LLVMSharp enum.
+	private const uint DW_ATE_BOOLEAN = 0x02;
+	private const uint DW_ATE_SIGNED = 0x05;
+	private const uint DW_ATE_UNSIGNED = 0x07;
+	private const uint DW_ATE_UNSIGNED_CHAR = 0x07;
+	private const uint DW_TAG_STRUCTURE_TYPE = 0x13;
+
+	private LLVMMetadataRef BasicDIType(PrimitiveType pt)
+	{
+		uint encoding = pt.Name switch {
+			"bool" => DW_ATE_BOOLEAN,
+			"char" => DW_ATE_UNSIGNED_CHAR,
+			"byte" => DW_ATE_UNSIGNED,
+			"int" or "long" => DW_ATE_SIGNED,
+			_ => throw new NotImplementedException()
+		};
+		using var name = new MarshaledString(pt.Name);
+		return LLVM.DIBuilderCreateBasicType(_diBuilder, name, (nuint)name.Length, SizeInBits(pt.Type), encoding, LLVMDIFlags.LLVMDIFlagZero);
+	}
+
+	private const int INT_BIT_SIZE = 32;
+	private const int POINTER_BIT_SIZE = 64;
+
+	private LLVMMetadataRef PointerDIType(LLVMMetadataRef baseType, string typeName)
+	{
+		using var name = new MarshaledString(typeName);
+		return LLVM.DIBuilderCreatePointerType(_diBuilder, baseType, POINTER_BIT_SIZE, 0, 0, name, (uint)name.Length);
+	}
+
+	private LLVMMetadataRef StringStructDIType()
+	{
+		var llvmType = _builtinTypes["string"];
+		var file = GetDIFile(_filename);
+		var members = stackalloc LLVMMetadataRef[2];
+		using (var len = new MarshaledString("len")) {
+			members[0] = LLVM.DIBuilderCreateMemberType(_diBuilder, default, len, (nuint)len.Length,
+				file, 0, 32, 0, OffsetInBits(llvmType, 0), LLVMDIFlags.LLVMDIFlagZero, GetDIType(Types.Int32));
+		}
+		var subs = stackalloc LLVMMetadataRef[1];
+		subs[0] = LLVM.DIBuilderGetOrCreateSubrange(_diBuilder, 0, 0);
+		var charArray = LLVM.DIBuilderCreateArrayType(_diBuilder, 0, 0, GetDIType(Types.Char), (LLVMOpaqueMetadata**)subs, 1);
+		using (var bytes = new MarshaledString("bytes")) {
+			members[0] = LLVM.DIBuilderCreateMemberType(_diBuilder, default, bytes, (nuint)bytes.Length,
+				file, 0, 0, 0, OffsetInBits(llvmType, 1), LLVMDIFlags.LLVMDIFlagZero, charArray);
+		}
+		using var str = new MarshaledString("string");
+		return LLVM.DIBuilderCreateStructType(_diBuilder, default, str, (nuint)str.Length,
+			file, 0, SizeInBits(llvmType), 0, LLVMDIFlags.LLVMDIFlagZero, default,
+			(LLVMOpaqueMetadata**)members, 2, 0, default, null, 0);
+	}
+
+	private LLVMMetadataRef SpanDIType(IType type, IType elemType)
+	{
+		var llvmType = LookupType(type);
+		var file = GetDIFile(_filename);
+		var ptr = LLVM.DIBuilderCreatePointerType(_diBuilder, GetDIType(elemType), POINTER_BIT_SIZE, 0, 0, null, 0);
+		var members = stackalloc LLVMMetadataRef[2];
+		using (var dn = new MarshaledString("data")) {
+			members[0] = LLVM.DIBuilderCreateMemberType(_diBuilder, default, dn, (nuint)dn.Length, file, 0,
+				POINTER_BIT_SIZE, 0, OffsetInBits(llvmType, 0), LLVMDIFlags.LLVMDIFlagZero, ptr);
+		}
+		using (var ln = new MarshaledString("data")) {
+			members[1] = LLVM.DIBuilderCreateMemberType(_diBuilder, default, ln, (nuint)ln.Length, file, 0,
+				INT_BIT_SIZE, 0, OffsetInBits(llvmType, 1), LLVMDIFlags.LLVMDIFlagZero, GetDIType(Types.Int32));
+		}
+		using var sn = new MarshaledString(type.Name);
+		return LLVM.DIBuilderCreateStructType(_diBuilder, _diCompileUnit, sn, (nuint)sn.Length, file, 0,
+			SizeInBits(llvmType), 0, LLVMDIFlags.LLVMDIFlagZero, default,
+			(LLVMOpaqueMetadata**)members, 2, 0, default, null, 0);
+	}
+
+	private LLVMMetadataRef StructDIType(IType type, InternalStruct ist)
+	{
+		var llvmType = LookupType(type);
+		var pos = ist.Decl.Position;
+		var file = GetDIFile(pos.File);
+		var line = (uint)Math.Max(pos.Line, 1);
+		using var name = new MarshaledString(ist.Name);
+		// temp forward-declared type for use by recursive types.
+		var fwd = LLVM.DIBuilderCreateReplaceableCompositeType(_diBuilder, DW_TAG_STRUCTURE_TYPE,
+			name, (nuint)name.Length, _diCompileUnit, file, line, 0, SizeInBits(llvmType), 0,
+			LLVMDIFlags.LLVMDIFlagZero, name, (nuint)name.Length);
+		_diTypes[type] = fwd;
+
+		var members = stackalloc LLVMMetadataRef[ist.Fields.Length];
+		for (int i = 0; i < ist.Fields.Length; ++i) {
+			var field = ist.Fields[i];
+			using var fName = new MarshaledString(field.Name);
+			members[i] = (LLVMMetadataRef)LLVM.DIBuilderCreateMemberType(_diBuilder, fwd, fName, (nuint)fName.Length,
+				file, line, SizeInBits(LookupType(field.Type)), 0, OffsetInBits(llvmType, (uint)i),
+				LLVMDIFlags.LLVMDIFlagZero, GetDIType(field.Type));
+		}
+		var result = LLVM.DIBuilderCreateStructType(_diBuilder, _diCompileUnit, name, (nuint)name.Length,
+			file, line, SizeInBits(llvmType), 0, LLVMDIFlags.LLVMDIFlagZero, default, (LLVMOpaqueMetadata**)members,
+			(uint)ist.Fields.Length, 0, default, name, (nuint)name.Length);
+		LLVM.MetadataReplaceAllUsesWith(fwd, result);
+		return result;
+	}
+
+	private LLVMMetadataRef InlineArrayDIType(InlineArrayType ia)
+	{
+		var llvmType = LookupType(ia);
+		var count = (long)(SizeOf(llvmType) / SizeOf(LookupType(ia.BaseType)));
+		var subs = stackalloc LLVMMetadataRef[1];
+		subs[0] = LLVM.DIBuilderGetOrCreateSubrange(_diBuilder, 0, count);
+		return LLVM.DIBuilderCreateArrayType(_diBuilder, SizeInBits(llvmType), 0,
+			GetDIType(ia.BaseType), (LLVMOpaqueMetadata**)subs, 1);
 	}
 
 	private void LoadStdlib()
@@ -151,6 +405,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		var funcType = LLVMTypeRef.CreateFunction(_context.Handle.Int32Type, []);
 		var func = _module.AddFunction("runtimeMain", funcType);
 		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+		ClearDebugScope();
 		foreach (var im in imports) {
 			var imInit = _module.AddFunction($"{im.Name}$init$", _mainType);
 			imInit.DLLStorageClass = LLVMDLLStorageClass.LLVMDLLImportStorageClass;
@@ -173,6 +428,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		if (_moduleInits.Count > 0) {
 			var func = _module.AddFunction(_filename + "$init$", _mainType);
 			_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+			ClearDebugScope();
 			foreach (var mi in _moduleInits) {
 				_builder.Handle.BuildCall2(_mainType, mi, []);
 			}
@@ -189,6 +445,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			_builder.Handle.PositionAtEnd(main.AppendBasicBlock("entry"));
 			_currentFunc = main;
 			_locals.Clear();
+			BeginDebugFunction(main, "main", node.Position);
 			Visit(node.Body);
 			_builder.CreateRetVoid();
 			main.VerifyFunction(LLVMVerifierFailureAction.LLVMPrintMessageAction);
@@ -236,6 +493,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 	{
 		var func = _module.AddFunction($"{node.Name}$$init", _mainType);
 		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+		ClearDebugScope();
 		foreach (var init in inits) {
 			Debug.Assert(_values.Count == 0);
 			Visit(init.Value);
@@ -266,12 +524,14 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_locals.Clear();
 
 		_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
+		BeginDebugFunction(func, node.Name.Name, node.Position);
 		for (int i = 0; i < node.Parameters.Length; ++i) {
 			var param = func.GetParam((uint)i);
 			param.Name = node.Parameters[i].Name.Name;
 			var alloc = _builder.Handle.BuildAlloca(param.TypeOf, $"param${param.Name}");
 			_locals[param.Name] = alloc;
 			_builder.Handle.BuildStore(param, alloc);
+			DeclareLocal(alloc, param.Name, node.Parameters[i].Semantic!.Type, node.Parameters[i].Position, i + 1);
 		}
 
 		if (node.IsConstructor) {
@@ -340,6 +600,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
 		RefType rt => LLVMTypeRef.CreatePointer(LookupType(rt.BaseType), 0),
 		InternalStruct ist => _customTypes[ist.Name],
+		InternalClass icl => _customTypes[icl.Name],
 		NilableType nt => LookupType(nt.BaseType),
 		_ => throw new NotImplementedException()
 	};
@@ -407,6 +668,7 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		_locals[node.Decl.Name] = alloc;
 		_builder.Handle.PositionAtEnd(currBlock);
 		_builder.Handle.BuildStore(val, alloc);
+		DeclareLocal(alloc, node.Decl.Name, sem.Type, node.Position, 0);
 	}
 
 	private void VisitGlobalConstDeclaration(VarDeclaration node, Expression value, LLVMTypeRef varType, GlobalFieldDecl sem)
@@ -621,6 +883,10 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 			var fType = LLVMTypeRef.CreateFunction(lTyp, @params, false);
 			var func = _module.AddFunction(ic.Name, fType);
 			var preserved = _builder.Handle.InsertBlock;
+			var preservedLoc = _debugInfo ? LLVM.GetCurrentDebugLocation2(_builder.Handle) : default;
+			if (_debugInfo) {
+				LLVM.SetCurrentDebugLocation2(_builder.Handle, default);
+			}
 			try {
 				_builder.Handle.PositionAtEnd(func.AppendBasicBlock("entry"));
 				var result = lTyp.Undef;
@@ -630,6 +896,9 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				_builder.Handle.BuildRet(result);
 			} finally {
 				_builder.Handle.PositionAtEnd(preserved);
+				if (_debugInfo) {
+					LLVM.SetCurrentDebugLocation2(_builder.Handle, preservedLoc);
+				}
 			}
 			_functions.Add(ic.Name, (fType, func));
 		}
@@ -1005,7 +1274,6 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 				dataPtrPtr, // dest
 				data,        // src
 				len//len64,       // size
-				//LLVMValueRef.CreateConstInt(_context.Handle.Int1Type, 0, false)
 			],
 			[]
 		);

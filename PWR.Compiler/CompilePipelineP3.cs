@@ -26,7 +26,7 @@ public class CompilePipelineP3
 			new SimpleLowering(),
 			new BindNamespaces(name), new BindTypes(), new BindMembers(), new LowerForLoops(), new BindExpressionsP3(),
 			new AddTypeConversions(), new InsertImplicitSelf(),
-			new BuildMetadata(name), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library)];
+			new BuildMetadata(name), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library, options.DebugInfo)];
 		Types.Populate(context);
 		LLVM.InitializeX86TargetInfo();
 		LLVM.InitializeX86Target();
@@ -86,6 +86,9 @@ public class CompilePipelineP3
 				args += " /nodefaultlib";
 			} else {
 				args += " /defaultlib:pwr";
+			}
+			if (_options.DebugInfo) {
+				args += " /debug";
 			}
 			args += " kernel32.lib ucrt.lib";
 			var process = Process.Start(

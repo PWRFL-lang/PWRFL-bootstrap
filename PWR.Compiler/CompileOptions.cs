@@ -46,4 +46,5 @@ public record CompileOptions(
 	CompileType CompileType = CompileType.File,
 	ProjectType ProjectType = ProjectType.Executable,
 	bool NoStdLib = false,
-	bool EmitLlvmIr = false);
+	bool EmitLlvmIr = false,
+	bool DebugInfo = false);
