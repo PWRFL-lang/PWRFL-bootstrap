@@ -103,6 +103,18 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	{
 		_scopes.Push(node);
 		try {
+			var seenDefault = false;
+			foreach (var p in node.Parameters) {
+				if (p.DefaultValue is { } dv) {
+					if (!dv.IsLiteral) {
+						throw new CompileError(dv, "A default parameter value must be a constant");
+					}
+					Visit(dv);
+					seenDefault = true;
+				} else if (seenDefault) {
+					throw new CompileError(p, $"A parameter without a default ({p.Name.Name}) cannot follow a defaulted parameter");
+				}
+			}
 			Visit(node.Body);
 		} finally {
 			_scopes.Pop();
@@ -150,13 +162,68 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 			};
 		}
 		var func = node.Semantic as IFunction ?? throw new CompileError(node, $"Function call is not bound to a function");
+		var selfOffset = func.HasSelf && func.Args is [{ Name.Name: "self" }, ..] ? 1 : 0;
+		if (node.Semantic is not (MagicFunction or ImplicitConstructor) && NeedsNormalizedArgs(node, func, selfOffset)) {
+			NormalizeArguments(node, func.Args.AsSpan(selfOffset));
+		}
 		for (int i = 0; i < node.Args.Length; ++i) {
-			var paramType = func.Args[i].ParamType.Semantic?.Type;
+			var paramType = func.Args[i + selfOffset].ParamType.Semantic?.Type;
 			if (paramType != null && paramType != node.Args[i].Semantic!.Type) {
 				node.Args[i].Annotate("cast", paramType);
 			}
 		}
 	}
+
+	private static bool NeedsNormalizedArgs(FunctionCallExpression node, IFunction func, int selfOffset)
+		=> (node.Args.Length != func.Args.Length - selfOffset) || node.Args.Any(a => a.HasAnnotation("argName"));
+
+	private void NormalizeArguments(FunctionCallExpression node, Span<ParameterDeclaration> parameters)
+	{
+		var result = new Expression[parameters.Length];
+		var seenNamed = false;
+		var positional = 0;
+		foreach (var arg in node.Args) {
+			if (arg.GetAnnotation("argName") is string argName) {
+				seenNamed = true;
+				var idx = -1;
+				for (int i = 0; i < parameters.Length; ++i) {
+					if (parameters[i].Name.Name == argName) {
+						idx = i;
+						break;
+					}
+				}
+				if (idx < 0) {
+					throw new CompileError(node, $"'{node.Target}' has no parameter named '{argName}'.");
+				}
+				if (result[idx] != null) {
+					throw new CompileError(node, $"Argment for parameter named '{argName}' was given more than once.");
+				}
+				result[idx] = arg;
+			} else {
+				if (seenNamed) {
+					throw new CompileError(arg, "a positional argument cannot follow a named argument");
+				}
+				if (positional >= parameters.Length) {
+					throw new CompileError(node, $"Too many arguments in call to '{node.Target}'");
+				}
+				result[positional] = arg;
+				++positional;
+			}
+		}
+		for (int i = 0; i < parameters.Length; ++i) {
+			result[i] ??= CloneLiteral(parameters[i].DefaultValue
+				?? throw new CompileError(node, $"No argument given for required parameter '{parameters[i].Name.Name}'"));
+		}
+		node.Args = result;
+	}
+
+	private static LiteralExpression CloneLiteral(Expression e) => e switch {
+		IntegerLiteralExpression il => new IntegerLiteralExpression(il.Position, il.Value) { Semantic = e.Semantic },
+		CharLiteralExpression cl => new CharLiteralExpression(cl.Position, cl.Value) { Semantic = e.Semantic },
+		StringLiteralExpression sl => new StringLiteralExpression(sl.Position, sl.Value) { Semantic = e.Semantic },
+		NilLiteralExpression nl => new NilLiteralExpression(nl.Position) { Semantic = e.Semantic },
+		_ => throw new CompileError(e, "A default parameter value must be a constant")
+	};
 
 	public override void VisitMemberIdentifier(MemberIdentifier node)
 	{

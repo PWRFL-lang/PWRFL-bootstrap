@@ -11,7 +11,7 @@ public class FunctionCallExpression(Expression target, Expression[] args) : Expr
 		=> new(target, args) { Semantic = Semantic };
 
 	public Expression Target { get; } = target;
-	public Expression[] Args { get; } = args;
+	public Expression[] Args { get; internal set; } = args;
 	public override NodeType Type => NodeType.FunctionCall;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitFunctionCallExpression(this);

@@ -7,7 +7,7 @@ internal enum ParamAttributes : ushort
 { }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-internal record struct ParamDefinition(int OwnerRef, int NameRef, ushort Index, ParamAttributes Attributes) : IMetadataRow
+internal record struct ParamDefinition(int OwnerRef, int NameRef, ushort Index, ParamAttributes Attributes, int DefaultRef) : IMetadataRow
 {
 	internal readonly string GetName(MetadataContext context) => context.GetString(NameRef);
 }

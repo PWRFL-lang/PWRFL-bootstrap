@@ -222,7 +222,8 @@ internal readonly struct PwrParserP3
 		var name = new Identifier(GetPosition(id), id.Text);
 		Expect(PwrLexer.COLON);
 		var type = ParseTypeReference();
-		return new ParameterDeclaration(name, type);
+		Expression? defaultValue = TryConsume(PwrLexer.ASSIGN) ? ParseExpression() : null;
+		return new ParameterDeclaration(name, type, defaultValue);
 	}
 
 	private TypeReference ParseTypeReference()
@@ -583,8 +584,21 @@ internal readonly struct PwrParserP3
 	private FunctionCallExpression ParseFunctionCall(Expression target)
 	{
 		_tokens.Consume();
-		var args = ParseCommaList(ParseExpression, PwrLexer.RPAREN);
+		var args = ParseCommaList(ParseArgument, PwrLexer.RPAREN);
 		return new FunctionCallExpression(target, args);
+	}
+
+	private Expression ParseArgument()
+	{
+		if (_tokens.LA(1) == PwrLexer.IDENTIFIER && _tokens.LA(2) == PwrLexer.COLON) {
+			var id = _tokens.LT(1).Text;
+			_tokens.Consume();
+			_tokens.Consume();
+			var value = ParseExpression();
+			value.Annotate("argName", id);
+			return value;
+		}
+		return ParseExpression();
 	}
 
 	private FunctionCallExpression ParseBareFunctionCall(Identifier id)

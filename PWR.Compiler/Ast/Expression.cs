@@ -19,4 +19,6 @@ public abstract class Expression(Position position) : Node(position), ISemanticN
 
 	public object? GetAnnotation(string name)
 		=> _annotations?.TryGetValue(name, out var result) != true ? null : result;
+
+	public bool HasAnnotation(string name) => _annotations?.ContainsKey(name) == true;
 }

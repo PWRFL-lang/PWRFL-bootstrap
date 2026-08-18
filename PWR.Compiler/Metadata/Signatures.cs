@@ -1,4 +1,5 @@
-﻿using PWR.Compiler.Helpers;
+﻿using PWR.Compiler.Ast;
+using PWR.Compiler.Helpers;
 using PWR.Compiler.Semantics;
 using PWR.Compiler.TypeSystem;
 using System;
@@ -180,6 +181,32 @@ internal static class Signatures
 		WriteType(ct.BaseType, ref writer, context);
 	}
 
+	internal static byte[] WriteConstant(Expression value)
+	{
+		using var ms = new MemoryStream();
+		using var bw = new BinaryWriter(ms);
+		switch (value) {
+			case IntegerLiteralExpression il:
+				bw.Write((byte)SigElement.I32);
+				bw.Write(il.Value);
+				break;
+			case CharLiteralExpression cl:
+				bw.Write((byte)SigElement.Char);
+				bw.Write(cl.Value);
+				break;
+			case StringLiteralExpression sl:
+				bw.Write((byte)SigElement.String);
+				bw.Write(sl.Value);
+				break;
+			case NilLiteralExpression:
+				bw.Write((byte)SigElement.Ptr);
+				break;
+			default:
+				throw new NotImplementedException($"Unsupported constant type: {value.GetType().Name}");
+		}
+		return ms.ToArray();
+	}
+
 	internal static IType ReadField(byte[] sig, MetadataContext context)
 	{
 		if (sig[0] != (byte)SigType.Field) {
@@ -222,6 +249,20 @@ internal static class Signatures
 			SigElement.Span => SpanType.Create(ReadType(ref sr, context)),
 			SigElement.Sequence => new SequenceType(ReadType(ref sr, context)),
 			_ => throw new NotImplementedException()
+		};
+	}
+
+	internal static LiteralExpression ReadConstant(Span<byte> data)
+	{
+		var sr = new SpanReader(data);
+		var typ = (SigElement)sr.ReadByte();
+		return typ switch
+		{
+			SigElement.I32 => new IntegerLiteralExpression(default, sr.ReadInt32()) { Semantic = new TypeRef(Types.Int32) },
+			SigElement.Char => new CharLiteralExpression(default, sr.ReadChar()) { Semantic = new TypeRef(Types.Char) },
+			SigElement.String => new StringLiteralExpression(default, sr.ReadString()) { Semantic = new TypeRef(Types.String) },
+			SigElement.Ptr => new NilLiteralExpression(default) { Semantic = new TypeRef(Types.Nil) },
+			_ => throw new NotImplementedException($"Unsupported constant type: {typ}")
 		};
 	}
 }

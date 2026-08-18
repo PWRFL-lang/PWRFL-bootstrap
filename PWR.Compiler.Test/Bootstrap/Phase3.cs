@@ -19,7 +19,7 @@ internal class Phase3
 	public void Setup()
 	{
 		_compiler = new PwrCompilerP3();
-		_tempFolder = Path.Combine(Path.GetTempPath(), "pwr");
+		_tempFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "pwr");
 		Directory.CreateDirectory(_tempFolder);
 		var filename = Directory.EnumerateFiles(".\\Code", "pwr*.pwrfl").OrderByDescending(f => f).First();
 		var memManager = Directory.EnumerateFiles(".\\Code", "mem*.pwrfl").OrderByDescending(f => f).First();

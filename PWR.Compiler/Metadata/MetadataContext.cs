@@ -101,7 +101,7 @@ internal class MetadataContext : IDisposable
 		WriteTable(FieldDefinitionTable, 3);
 		WriteTable(MethodDefinitionTable, 4);
 		WriteTable(ParamDefinitionTable, 5);
-		var header = new MetadataHeader(0, 1, sizes);
+		var header = new MetadataHeader(0, 2, sizes);
 		return (header, metadataStream.ToArray(), ((MemoryStream)_blobWriter.BaseStream).ToArray());
 
 		void WriteTable<T>(List<T> table, int idx) where T: struct {
@@ -118,7 +118,7 @@ internal class MetadataContext : IDisposable
 		var offset = MemoryMarshal.AsBytes(headers).Length;
 		meta = meta[offset..];
 		header.Deconstruct(out var major, out var minor, out var tableSizes);
-		if (major != 0 || minor != 1) {
+		if (major != 0 || minor != 2) {
 			throw new Exception("Invalid metadata header");
 		}
 		ReadTable(LibraryTable, 0, ref meta);
@@ -191,13 +191,16 @@ internal class MetadataContext : IDisposable
 			_tokenCache.TryGetValue(parent, out var parentTok)
 			&& parentTok.Type == METHOD_DEF_ID
 			&& parentTok.Value == MethodDefinitionTable.Count - 1);
-		var param = new ParamDefinition(parentTok.Value, AddString(parameter.Name), (ushort)parameter.Position, default);
+		var defaultRef = parameter.Param.DefaultValue is { } defValue 
+			? AddBlob(Signatures.WriteConstant(defValue))
+			: 0;
+		var param = new ParamDefinition(parentTok.Value, AddString(parameter.Name), (ushort)parameter.Position, default, defaultRef);
 		var token = new Token(PARAM_DEF_ID, ParamDefinitionTable.Count);
 		ParamDefinitionTable.Add(param);
 		_tokenCache.Add(parameter, token);
 	}
 
-	private TypeOfType GetTypeType(ISemantic sem) => sem switch {
+	private static TypeOfType GetTypeType(ISemantic sem) => sem switch {
 		Module => TypeOfType.Module,
 		StructDecl => TypeOfType.Value,
 		_ => throw new NotImplementedException()
