@@ -207,7 +207,7 @@ internal class Phase4
 		""",
 		"positional argument cannot follow a named argument");
 
-	[Test, Ignore("Implement a constant-folding pass first")]
+	[Test]
 	public void ConstantFoldedDefault() => RunTest("""
 		def foo(x: int = 3 + 2): int
 			return x
