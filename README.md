@@ -29,6 +29,8 @@ At the completion of each phase other than the first, (because this repo was not
   * Add self-describing metadata to shared libraries, so that PWRFL code can import from these libraries with no need for external files to describe them
   * Demonstrate a working runtime by porting existing tests from Phase 1
 * Phase 4 (in progress):
+  * Add debug support
+  * Add default parameter support
   * With a working allocator, implement dynamic data types
     * Dynamic arrays
     * Collections

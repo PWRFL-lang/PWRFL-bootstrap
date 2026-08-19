@@ -131,7 +131,7 @@ public class CompilePipelineP3
 				File.WriteAllText(natvis, NATVIS);
 				args += $" /natvis:{natvis}";
 			}
-			args += " kernel32.lib ucrt.lib";
+			args += " kernel32.lib";
 			var process = Process.Start(
 				new ProcessStartInfo("lld-link", args)
 				{ RedirectStandardError = true, UseShellExecute = false })!;
