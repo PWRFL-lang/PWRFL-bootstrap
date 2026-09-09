@@ -8,4 +8,5 @@ public interface IType
 	IType? ElementType => this is ICollectionType c ? c.BaseType : null;
 
 	ISemantic? GetMember(string name) => null;
+	bool IsStruct => false;
 }

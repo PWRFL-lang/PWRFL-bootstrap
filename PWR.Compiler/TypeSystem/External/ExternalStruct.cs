@@ -3,7 +3,8 @@
 namespace PWR.Compiler.TypeSystem.External;
 
 internal class ExternalStruct(string? ns, string name, IType? parent, MetadataContext context, int rowIdx)
-	: ExternalType(ns, name, parent, context, rowIdx)
+	: ExternalType(ns, name, parent, context, rowIdx), IType
 {
 	protected override Token IdToken => new(MetadataContext.TYPE_DEF_ID, _rowIdx);
+	bool IType.IsStruct => true;
 }

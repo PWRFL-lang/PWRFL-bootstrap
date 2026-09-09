@@ -850,7 +850,11 @@ public unsafe partial class CodegenP3(LLVMContext context, LLVMModuleRef module,
 		int selfCount = 0;
 		if (node.Target is MemberIdentifier mi && node.Semantic!.SemanticType.HasFlag(SemanticType.HasSelf)) {
 			selfCount = 1;
-			Visit(mi.ParentExpr);
+			if (mi.ParentExpr.Semantic!.Type.IsStruct) {
+				_lValueVisitor.Visit(mi.ParentExpr);
+			} else {
+				Visit(mi.ParentExpr);
+			}
 		}
 		Visit(node.Args);
 		Span<LLVMValueRef> args = stackalloc LLVMValueRef[node.Args.Length + selfCount];

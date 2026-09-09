@@ -95,6 +95,31 @@ internal class Phase3
 		"3");
 
 	[Test]
+	public void StructsMutability() => RunTest("""
+		struct Counter
+			value: int
+
+			def Increment()
+				self.value += 1
+			end
+
+			def GetValue(): int
+				return self.value
+			end
+		end
+
+		var c = Counter(0)
+		c.Increment()
+		c.Increment()
+		c.Increment()
+		print c.GetValue().ToString()  ; 3
+		""",
+		"""
+		3
+
+		""");
+
+	[Test]
 	public void StructsValueSemantics() => RunTest("""
 		struct Point
 			X: int

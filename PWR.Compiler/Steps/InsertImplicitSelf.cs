@@ -1,5 +1,6 @@
 ﻿using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
+using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Steps;
 
@@ -28,9 +29,13 @@ public class InsertImplicitSelf : TransformerCompileStep
 	{
 		if (node.Semantic is MethodDef { HasSelf: true } fd && node.Parameters is not [{ Name.Name: "self" }, ..] && !node.IsConstructor) {
 			var body = Visit(node.Body) ?? [];
+			var selfType = fd.Owner!.Type;
+			if (selfType.IsStruct) {
+				selfType = RefType.Create(selfType);
+			}
 			var implicitSelf = new ParameterDeclaration(
 					new Identifier(default, "self"),
-					new SimpleTypeReference(default, fd.Owner!.Type.Name) { Semantic = new TypeRef(fd.Owner.Type) });
+					new SimpleTypeReference(default, fd.Owner.Type.Name) { Semantic = new TypeRef(selfType) });
 			implicitSelf.Semantic = new ParamDef(implicitSelf, 0);
 			for (int i = 0; i < node.Parameters.Length; ++i) {
 				var param = node.Parameters[i];

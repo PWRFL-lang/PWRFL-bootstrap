@@ -20,6 +20,7 @@ public class InternalStruct(StructDeclaration decl) : ICompositeType
 	}
 
 	ISemantic? IType.GetMember(string name) => Decl.Body.FirstOrDefault(d => d.Semantic?.Name == name)?.Semantic;
+	bool IType.IsStruct => true;
 
 	public override string ToString() => Name;
 }
