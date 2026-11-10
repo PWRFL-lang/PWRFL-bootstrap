@@ -11,7 +11,7 @@ public class WhileStatement(Position pos, Expression cond, Statement[] body) : S
 	public Expression Cond { get; } = cond;
 	public Block Body { get; } = new(body);
 
-	public override NodeType Type => NodeType.WhileStatement;
+	public override NodeType NodeType => NodeType.WhileStatement;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitWhileStatement(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitWhileStatement(this);

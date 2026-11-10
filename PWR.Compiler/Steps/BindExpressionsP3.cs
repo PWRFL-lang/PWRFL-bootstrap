@@ -5,6 +5,8 @@ using System.Linq;
 using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
 using PWR.Compiler.TypeSystem;
+using PWR.Compiler.TypeSystem.External;
+using PWR.Compiler.TypeSystem.Internal;
 
 namespace PWR.Compiler.Steps;
 
@@ -57,8 +59,12 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	{
 		if (decl.VarType == null) {
 			((ISetTypeSemantic)decl.Semantic!).Type = typ;
-		} else if (decl.VarType.Semantic!.Type != typ) {
-			throw new NotImplementedException();
+		} else {
+			var declaredType = decl.VarType.Semantic!.Type;
+			if (declaredType != typ && !typ.CanAssignTo(declaredType)) {
+				throw new CompileError(decl, $"A value of type '{typ}' cannot be assigned to a variable of type '{declaredType}'");
+			}
+			((ISetTypeSemantic)decl.Semantic!).Type = declaredType;
 		}
 	}
 
@@ -84,6 +90,17 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		}
 	}
 
+	public override void VisitClassDeclaration(ClassDeclaration node)
+	{
+		var old = _selfType;
+		try {
+			_selfType = node.Semantic?.Type;
+			base.VisitClassDeclaration(node);
+		} finally {
+			_selfType = old;
+		}
+	}
+
 	public override void VisitAnnotation(Annotation node)
 	{ }
 
@@ -101,6 +118,10 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	// for declarations, skip names and only look at expressions
 	public override void VisitFunctionDeclaration(FunctionDeclaration node)
 	{
+		var enclosingSelf = _selfType;
+		if (node.Flags.HasFlag(FunctionFlags.ClassScope) && _selfType is IClassType cls) {
+			_selfType = MetaclassType.Create(cls);
+		}
 		_scopes.Push(node);
 		try {
 			var seenDefault = false;
@@ -118,6 +139,7 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 			Visit(node.Body);
 		} finally {
 			_scopes.Pop();
+			_selfType = enclosingSelf;
 		}
 	}
 
@@ -148,31 +170,70 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		if (st.HasFlag(SemanticType.Function)) {
 			node.Semantic = target;
 		} else if (st.HasFlag(SemanticType.Type) && target.Type is ICompositeType ct) {
-			node.Semantic = new ImplicitConstructor(ct);
+			if (target.Type.IsStruct) {
+				node.Semantic = new ImplicitConstructor(ct);
+			} else throw new CompileError(node, $"Class '{target.Type.Name}' must be constructed via a named constructor.");
 		} else throw new CompileError(node, $"No function named '{node.Target}' could be found.");
 		if (node.Semantic is MagicFunction mf) {
 			mf.ReturnType.Semantic = mf.FullName switch {
 				"ord" => InferOrdType(node),
 				"range" => new TypeRef(new SequenceType(MergeTypes(node.Args.Select(GetType)))),
 				"$print" => new TypeRef(Types.Int32),
-				"StrToPtr" or "span$ToPtr" => new TypeRef(Types.Ptr),
+				"StrToPtr" or "span$ToPtr" or "arr$ToPtr" => new TypeRef(Types.Ptr),
 				"ptr$AsSpan" or "ref$AsSpan" => new TypeRef(mf.Type),
 				"arr$Resize" => new TypeRef(Types.Void),
 				_ => throw new CompileError(node, $"Unknown magic function name: '{mf.FullName}'"),
 			};
 		}
 		var func = node.Semantic as IFunction ?? throw new CompileError(node, $"Function call is not bound to a function");
+		CheckAbstractAccess(node);
 		var selfOffset = func.HasSelf && func.Args is [{ Name.Name: "self" }, ..] ? 1 : 0;
 		if (node.Semantic is not (MagicFunction or ImplicitConstructor) && NeedsNormalizedArgs(node, func, selfOffset)) {
 			NormalizeArguments(node, func.Args.AsSpan(selfOffset));
 		}
 		for (int i = 0; i < node.Args.Length; ++i) {
 			var paramType = func.Args[i + selfOffset].ParamType.Semantic?.Type;
-			if (paramType != null && paramType != node.Args[i].Semantic!.Type) {
+			var argType = node.Args[i].Semantic!.Type;
+			if (paramType != null && paramType != argType) {
+				if (IsClassLike(paramType) && IsClassLike(argType) && !argType.CanAssignTo(paramType)) {
+					throw new CompileError(node.Args[i], $"A value of type '{argType}' cannot be passed as a parameter of type '{paramType}'.");
+				}
 				node.Args[i].Annotate("cast", paramType);
 			}
 		}
 	}
+
+	private static void CheckAbstractAccess(FunctionCallExpression node)
+	{
+		if (node.Target is not MemberIdentifier { ParentExpr: { } receiver } || receiver is SelfLiteralExpression) {
+			return;
+		}
+		if (receiver.Semantic is not { SemanticType: var receiverKind, Type: IClassType cls } || !receiverKind.HasFlag(SemanticType.Type)) {
+			return; // not a class name
+		}
+		if (node.Semantic!.SemanticType.HasFlag(SemanticType.Constructor) && cls.IsAbstract) {
+			throw new CompileError(node, $"Cannot construct abstract class '{cls.Name}'.");
+		}
+		var slot = cls.SlotOf(node.Semantic!.Name);
+		if (slot >= 0 && cls.Vmt[slot].IsAbstract) {
+			throw new CompileError(node, $"Cannot call abstract method '{cls.Name}.{node.Semantic.Name}'.");
+		}
+	}
+
+	private static void CheckAbstractConstantRead(MemberIdentifier node)
+	{
+		if (node.Semantic is not IClassConstant constant || node.ParentExpr is SelfLiteralExpression) {
+			return;
+		}
+		if (node.ParentExpr.Semantic is { SemanticType: var kind, Type: IClassType cls } && kind.HasFlag(SemanticType.Type)) {
+			var slot = cls.SlotOf(constant.Name);
+			if (slot >= 0 && cls.Vmt[slot].IsAbstract) {
+				throw new CompileError(node, $"Cannot read abstract member '{cls.Name}.{constant.Name}'.");
+			}
+		}
+	}
+
+	private static bool IsClassLike(IType type) => type is IClassType or MetaclassType;
 
 	private static bool NeedsNormalizedArgs(FunctionCallExpression node, IFunction func, int selfOffset)
 		=> (node.Args.Length != func.Args.Length - selfOffset) || node.Args.Any(a => a.HasAnnotation("argName"));
@@ -217,10 +278,11 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		node.Args = result;
 	}
 
-	private static LiteralExpression CloneLiteral(Expression e) => e switch {
+	internal static LiteralExpression CloneLiteral(Expression e) => e switch {
 		IntegerLiteralExpression il => new IntegerLiteralExpression(il.Position, il.Value) { Semantic = e.Semantic },
 		CharLiteralExpression cl => new CharLiteralExpression(cl.Position, cl.Value) { Semantic = e.Semantic },
 		StringLiteralExpression sl => new StringLiteralExpression(sl.Position, sl.Value) { Semantic = e.Semantic },
+		BooleanLiteralExpression bl => new BooleanLiteralExpression(bl.Position, bl.Value) { Semantic = e.Semantic },
 		NilLiteralExpression nl => new NilLiteralExpression(nl.Position) { Semantic = e.Semantic },
 		_ => throw new CompileError(e, "A default parameter value must be a constant")
 	};
@@ -242,6 +304,7 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 				sem = matches[0].Type.GetMember(node.Name);
 			}
 			node.Semantic = sem;
+			CheckAbstractConstantRead(node);
 			return;
 		}
 		throw new CompileError(node, $"Type '{pSem.Type}' does not contain a member named '{node.Name}'.");
@@ -297,6 +360,9 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	public override void VisitAssignStatement(AssignStatement node)
 	{
 		base.VisitAssignStatement(node);
+		if (node.Left.Semantic is IClassConstant constant) {
+			throw new CompileError(node, $"'{constant.Name}' is a constant, and cannot be assigned to.");
+		}
 		var lType = GetType(node.Left);
 		var rType = GetType(node.Right);
 		if (lType != rType) {
@@ -304,6 +370,36 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 				throw new CompileError(node, $"A value of type '{rType}' cannot be assigned to a variable of type '{lType}'");
 			}
 			node.Right.Annotate("cast", lType);
+		}
+	}
+
+	public override void VisitFieldDeclaration(FieldDeclaration node)
+	{
+		base.VisitFieldDeclaration(node);
+		if (node.Semantic is ClassConstantDecl constant) {
+			// The value is already known to be a literal (see BindMembers); it has to suit the type.
+			if (node.Value != null) {
+				var declared = constant.Type;
+				var actual = GetType(node.Value);
+				if (declared != actual && !Types.IsCompatible(declared, actual)) {
+					throw new CompileError(node, $"A value of type '{actual}' cannot be the value of the constant '{constant.Name}: {declared}'.");
+				}
+			}
+			return;
+		}
+		if (node.Value == null || node.Semantic is not FieldDecl field) {
+			return;
+		}
+		if (field.ParentType is StructDeclaration) {
+			throw new CompileError(node, "Default values for struct fields are not currently supported.");
+		}
+		var lType = field.Type;
+		var rType = GetType(node.Value);
+		if (lType != rType) {
+			if (!Types.IsCompatible(lType, rType)) {
+				throw new CompileError(node, $"A value of type '{rType}' cannot be used as the default for a field of type '{lType}'");
+			}
+			node.Value.Annotate("cast", lType);
 		}
 	}
 
@@ -316,11 +412,30 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 	public override void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Int32);
 
+	public override void VisitBooleanLiteralExpression(BooleanLiteralExpression node)
+		=> node.Semantic = new Literal(node, Types.Bool);
+
 	public override void VisitSelfLiteralExpression(SelfLiteralExpression node)
 		=> node.Semantic = new SelfRef(node, _selfType ?? throw new CompileError(node, "No 'self' context is available"));
 
 	public override void VisitNilLiteralExpression(NilLiteralExpression node)
 		=> node.Semantic = new Literal(node, Types.Nil);
+
+	public override void VisitSuperCallExpression(SuperCallExpression node)
+	{
+		base.VisitSuperCallExpression(node);
+		var cls = _selfType switch {
+			InternalClass c => c,
+			MetaclassType { Class: InternalClass c } => c,
+			_ => throw new CompileError(node, "'super' can only be used inside a class"),
+		};
+		var member = cls.BaseType.GetMember(node.Name.Name)
+			?? throw new CompileError(node, $"'{cls.BaseType.Name}' has no constructor named '{node.Name.Name}'");
+		if (member is IFunction { Flags: var flags } && flags.HasFlag(FunctionFlags.Abstract)) {
+			throw new CompileError(node, $"Cannot call '{node.Name.Name}' through 'super': it is abstract in '{cls.BaseType.Name}'.");
+		}
+		node.Semantic = member;
+	}
 
 	public override void VisitUnaryExpression(UnaryExpression node)
 	{
@@ -374,9 +489,9 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		var type = GetType(node.Expr);
 		foreach (var idx in node.Indices) {
 			if (idx is SliceExpression) {
-				type = type is SpanType ? type : SpanType.Create((type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
+				type = type is SpanType ? type : SpanType.Create((type as ICollectionType)?.ElementType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
 			} else {
-				type = (type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
+				type = (type as ICollectionType)?.ElementType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
 			}
 		}
 		node.Semantic = new Indexing(node, type);
@@ -444,7 +559,7 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 			"int" => Types.Int32,
 			"string" => Types.String,
 			"ptr" => Types.Ptr,
-			_ => CheckType(Lookup(node.Name, SemanticType.Type), node)
+			_ => CheckType(LookupType(node.Name), node)
 		});
 
 	private static IType CheckType(List<ISemantic> list, SimpleTypeReference node) => list.Count switch {
@@ -452,6 +567,24 @@ internal class BindExpressionsP3 : ScopeSensitiveCompileStep
 		1 => list[0].Type,
 		_ => throw new CompileError(node, $"Multiple types named '{node.Name}' found in scope."),
 	};
+
+	public override void VisitMetaTypeReference(MetaTypeReference node)
+	{
+		if (node.Semantic == null) {
+			base.VisitMetaTypeReference(node);
+			node.Semantic = new TypeRef(node.BaseType == null ? MetaclassType.Any : MetaclassType.For(GetType(node.BaseType), node.BaseType));
+		}
+	}
+
+	public override void VisitMetaclassExpression(MetaclassExpression node)
+	{
+		base.VisitMetaclassExpression(node);
+		var type = MetaclassType.For(GetType(node.Type), node.Type);
+		if (type.Class.IsAbstract) {
+			throw new CompileError(node, $"Cannot take the metaclass of abstract class '{type.Class.Name}'.");
+		}
+		node.Semantic = new MetaclassLiteral(node, type);
+	}
 
 	public override void VisitSpanTypeReference(SpanTypeReference node)
 	{

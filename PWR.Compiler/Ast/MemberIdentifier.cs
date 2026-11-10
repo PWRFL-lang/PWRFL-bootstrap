@@ -4,7 +4,7 @@ public class MemberIdentifier(Expression parent, string name): Identifier(parent
 {
 	public Expression ParentExpr { get; } = parent;
 
-	public override NodeType Type => NodeType.MemberIdentifier;
+	public override NodeType NodeType => NodeType.MemberIdentifier;
 
 	public override Node? Accept(ITransformer visitor) => visitor.VisitMemberIdentifier(this);
 

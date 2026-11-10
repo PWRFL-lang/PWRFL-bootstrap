@@ -7,6 +7,7 @@ public interface IVisitor
 	void VisitAnnotation(Annotation node);
 	void VisitModuleDeclaration(ModuleDeclaration node);
 	void VisitStructDeclaration(StructDeclaration node);
+	void VisitClassDeclaration(ClassDeclaration node);
 	void VisitFieldDeclaration(FieldDeclaration node);
 	void VisitFunctionDeclaration(FunctionDeclaration node);
 	void VisitParameterDeclaration(ParameterDeclaration node);
@@ -17,6 +18,8 @@ public interface IVisitor
 	void VisitSpanTypeReference(SpanTypeReference node);
 	void VisitRefTypeReference(RefTypeReference node);
 	void VisitSequenceTypeReference(SequenceTypeReference node);
+	void VisitMetaTypeReference(MetaTypeReference node);
+	void VisitMetaclassExpression(MetaclassExpression node);
 	void VisitAssignStatement(AssignStatement node);
 	void VisitIfStatement(IfStatement node);
 	void VisitForStatement(ForStatement node);
@@ -43,6 +46,8 @@ public interface IVisitor
 	void VisitCharLiteralExpression(CharLiteralExpression node);
 	void VisitStringLiteralExpression(StringLiteralExpression node);
 	void VisitIntegerLiteralExpression(IntegerLiteralExpression node);
+	void VisitBooleanLiteralExpression(BooleanLiteralExpression node);
 	void VisitNilLiteralExpression(NilLiteralExpression node);
 	void VisitSelfLiteralExpression(SelfLiteralExpression node);
+	void VisitSuperCallExpression(SuperCallExpression node);
 }

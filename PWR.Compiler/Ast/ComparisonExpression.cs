@@ -27,7 +27,7 @@ public class ComparisonExpression(Expression l, Expression r, ComparisonOperator
 		return result;
 	}
 
-	public override NodeType Type => NodeType.ComparisonExpression;
+	public override NodeType NodeType => NodeType.ComparisonExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitComparisonExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitComparisonExpression(this);

@@ -4,7 +4,7 @@ public class RefExpression(Position position, Expression expr) : Expression(posi
 {
 	public Expression Expr { get; } = expr;
 
-	public override NodeType Type => NodeType.RefExpression;
+	public override NodeType NodeType => NodeType.RefExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitRefExpression(this);
 

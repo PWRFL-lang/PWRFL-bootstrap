@@ -148,9 +148,9 @@ public class InferTypes : VisitorCompileStep
 		var type = GetType(node.Expr);
 		foreach (var idx in node.Indices) {
 			if (idx is SliceExpression) {
-				type = type is SpanType ? type : SpanType.Create((type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
+				type = type is SpanType ? type : SpanType.Create((type as ICollectionType)?.ElementType ?? throw new CompileError(idx, $"Type '{type}' is not indexable"));
 			} else {
-				type = (type as ICollectionType)?.BaseType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
+				type = (type as ICollectionType)?.ElementType ?? throw new CompileError(idx, $"Type '{type}' is not indexable");
 			}
 		}
 		node.Semantic = new Indexing(node, type);

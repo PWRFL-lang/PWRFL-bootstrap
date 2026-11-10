@@ -12,7 +12,7 @@ public class FieldDecl(FieldDeclaration node, TypeDeclaration td, int index) : I
 	public string Name => Node.Decl.Name;
 	public string FullName => $"{ParentType.Semantic!.FullName}${Name}";
 
-	public SemanticType SemanticType => SemanticType.Field;
+	public SemanticType SemanticType => IsStatic ? SemanticType.Field : SemanticType.Field | SemanticType.HasSelf;
 
 	public IType Type => Node.Decl.VarType!.Semantic!.Type ?? Node.Value?.Semantic?.Type ?? throw new CompileError(Node, "Internal compiler error: No type bound for this field");
 	

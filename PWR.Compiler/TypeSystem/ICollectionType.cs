@@ -2,5 +2,5 @@
 
 public interface ICollectionType
 {
-	public IType BaseType { get; }
+	public IType ElementType { get; }
 }

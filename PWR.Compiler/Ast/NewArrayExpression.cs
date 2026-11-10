@@ -5,7 +5,7 @@ public class NewArrayExpression(Position pos, TypeReference type, Expression siz
 	public TypeReference ArrayType { get; } = type;
 	public Expression Size { get; } = size;
 
-	public override NodeType Type => NodeType.NewArrayExpression;
+	public override NodeType NodeType => NodeType.NewArrayExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitNewArrayExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitNewArrayExpression(this);

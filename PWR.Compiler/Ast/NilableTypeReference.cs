@@ -4,7 +4,7 @@ public class NilableTypeReference(TypeReference baseType) : TypeReference(baseTy
 {
 	public TypeReference BaseType { get; } = baseType;
 
-	public override NodeType Type => NodeType.NilableTypeReference;
+	public override NodeType NodeType => NodeType.NilableTypeReference;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitNilableTypeReference(this);
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using PWR.Compiler.Semantics;
+using PWR.Compiler.TypeSystem;
 
 namespace PWR.Compiler.Ast;
 
@@ -10,11 +11,12 @@ public abstract class TypeDeclaration(Position pos, Identifier name, Declaration
 	: Declaration(pos), IScope
 {
 	public Identifier Name { get; } = name;
-	public Declaration[] Body { get; } = body;
+	public Declaration[] Body { get; internal set; } = body;
 
 	internal List<ISemantic> SymbolTable { get; init; } = [];
+	public IType Type => Semantic!.Type;
 
-	public bool Lookup(string name, List<ISemantic> collector, SemanticType type)
+	public virtual bool Lookup(string name, List<ISemantic> collector, SemanticType type)
 	{
 		var oldCount = collector.Count;
 		collector.AddRange(SymbolTable.Where(s => ((uint)s.SemanticType & (uint)type) != 0 && s.Name == name));

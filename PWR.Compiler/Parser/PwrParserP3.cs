@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+
 using Antlr4.Runtime;
 
 using PWR.Compiler.Ast;
@@ -32,12 +33,14 @@ internal readonly struct PwrParserP3
 		var ns = TryConsume(PwrLexer.NAMESPACE) ? ParseNamespace() : null;
 		while (_tokens.LA(1) != PwrLexer.Eof) {
 			switch (_tokens.LA(1)) {
-				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT or PwrLexer.STRUCT:
+				case PwrLexer.FUNCTION or PwrLexer.MODULE or PwrLexer.AT or PwrLexer.STRUCT or PwrLexer.CLASS:
 					declarations.Add(ParseDeclaration());
 					break;
 				case PwrLexer.NEWLINE:
 					_tokens.Consume();
 					break;
+				case PwrLexer.ABSTRACT:
+					throw new ParseError(GetPosition(_tokens.LT(1)), "'abstract' goes after 'class': write `class abstract Name`.");
 				default:
 					body.Add(ParseStatement());
 					break;
@@ -50,6 +53,20 @@ internal readonly struct PwrParserP3
 	{
 		var result = ParseIdentifier().ToString();
 		Expect(PwrLexer.NEWLINE);
+		return result;
+	}
+
+	private List<T> ParseCommaList<T>(Func<T> reader)
+	{
+		var result = new List<T>();
+		while (true) {
+			result.Add(reader());
+			if (_tokens.LA(1) == PwrLexer.COMMA) {
+				_tokens.Consume();
+			} else {
+				break;
+			}
+		}
 		return result;
 	}
 
@@ -81,6 +98,7 @@ internal readonly struct PwrParserP3
 			PwrLexer.FUNCTION or PwrLexer.CONSTRUCTOR => ParseFunctionDeclaration(annotations),
 			PwrLexer.MODULE => ParseModuleDeclaration(annotations),
 			PwrLexer.STRUCT => ParseStructDeclaration(annotations),
+			PwrLexer.CLASS => ParseClassDeclaration(annotations),
 			_ => throw new UnreachableException(),
 		};
 	}
@@ -104,7 +122,7 @@ internal readonly struct PwrParserP3
 		var pos = GetPosition(tok);
 		_tokens.Consume();
 		var isCtor = tok.Type == PwrLexer.CONSTRUCTOR;
-		var isAbstract = TryConsume(PwrLexer.ABSTRACT);
+		var flags = ParseMemberModifiers(isCtor);
 		var id = Expect(PwrLexer.IDENTIFIER);
 		var name = new Identifier(GetPosition(id), id.Text);
 		Expect(PwrLexer.LPAREN);
@@ -114,9 +132,35 @@ internal readonly struct PwrParserP3
 			retType = ParseTypeReference();
 		}
 		Expect(PwrLexer.NEWLINE);
-		var body = isAbstract ? [] : ParseBlock();
-		var flags = isAbstract ? FunctionFlags.Abstract : FunctionFlags.None;
+		var body = flags.HasFlag(FunctionFlags.Abstract) ? [] : ParseBlock();
 		return new FunctionDeclaration(pos, flags, name, parameters, retType, body) { Annotations = [..annotations], IsConstructor = isCtor };
+	}
+
+	// The modifiers after `def` or `constructor`: `abstract`, `virtual`, `override` and, for `def`,
+	// `class`, in any order and each at most once.
+	private FunctionFlags ParseMemberModifiers(bool isCtor)
+	{
+		var flags = FunctionFlags.None;
+		while (_tokens.LT(1) is { Type: PwrLexer.ABSTRACT or PwrLexer.VIRTUAL or PwrLexer.OVERRIDE or PwrLexer.CLASS } token) {
+			var flag = token.Type switch {
+				PwrLexer.ABSTRACT => FunctionFlags.Abstract,
+				PwrLexer.VIRTUAL => FunctionFlags.Virtual,
+				PwrLexer.OVERRIDE => FunctionFlags.Override,
+				_ => FunctionFlags.ClassScope,
+			};
+			if (isCtor && flag == FunctionFlags.ClassScope) {
+				throw new ParseError(GetPosition(token), "A constructor cannot be declared 'class'.");
+			}
+			if (flags.HasFlag(flag)) {
+				throw new ParseError(GetPosition(token), $"The modifier '{token.Text}' appears more than once.");
+			}
+			flags |= flag;
+			_tokens.Consume();
+		}
+		if (flags.HasFlag(FunctionFlags.Virtual) && flags.HasFlag(FunctionFlags.Override)) {
+			throw new ParseError(GetPosition(_tokens.LT(1)), "A member cannot be both 'virtual' and 'override'.");
+		}
+		return flags;
 	}
 
 	private ModuleDeclaration ParseModuleDeclaration(List<Annotation> annotations)
@@ -144,7 +188,7 @@ internal readonly struct PwrParserP3
 				default:
 					if (_tokens.LA(1) == PwrLexer.IDENTIFIER) {
 						var result = ParseVarDeclaration();
-						body.Add(new FieldDeclaration(result.Position, result, null, VarUsage.Var));
+						body.Add(new FieldDeclaration(result.Position, result, TryConsume(PwrLexer.ASSIGN) ? ParseExpression() : null, VarUsage.Var));
 						Expect(PwrLexer.NEWLINE);
 					} else {
 						throw new ParseError(GetPosition(_tokens.LT(1)), "Unexpected module member");
@@ -163,6 +207,24 @@ internal readonly struct PwrParserP3
 		var id = Expect(PwrLexer.IDENTIFIER);
 		var name = new Identifier(GetPosition(id), id.Text);
 		Expect(PwrLexer.NEWLINE);
+		List<Declaration> body = ParseStructBody();
+		return new StructDeclaration(pos, name, body) { Annotations = [.. annotations] };
+	}
+
+	private ClassDeclaration ParseClassDeclaration(List<Annotation> annotations)
+	{
+		var pos = GetPosition(_tokens.LT(1));
+		_tokens.Consume();
+		var isAbstract = TryConsume(PwrLexer.ABSTRACT);
+		var name = ParseIdentifier();
+		var inherited = TryConsume(PwrLexer.EXTENDS) ? ParseCommaList(ParseIdentifier) : [];
+		Expect(PwrLexer.NEWLINE);
+		List<Declaration> body = ParseStructBody();
+		return new ClassDeclaration(pos, name, [.. inherited], body) { Annotations = [.. annotations], IsAbstract = isAbstract };
+	}
+
+	private List<Declaration> ParseStructBody()
+	{
 		var body = new List<Declaration>();
 		while (_tokens.LA(1) != PwrLexer.END) {
 			switch (_tokens.LA(1)) {
@@ -180,7 +242,7 @@ internal readonly struct PwrParserP3
 				default:
 					if (_tokens.LA(1) == PwrLexer.IDENTIFIER) {
 						var result = ParseVarDeclaration();
-						body.Add(new FieldDeclaration(result.Position, result, null, VarUsage.Var));
+						body.Add(new FieldDeclaration(result.Position, result, TryConsume(PwrLexer.ASSIGN) ? ParseExpression() : null, VarUsage.Var));
 						Expect(PwrLexer.NEWLINE);
 					} else {
 						throw new ParseError(GetPosition(_tokens.LT(1)), "Unexpected struct member");
@@ -189,7 +251,7 @@ internal readonly struct PwrParserP3
 			}
 		}
 		_tokens.Consume();
-		return new StructDeclaration(pos, name, body) { Annotations = [..annotations] };
+		return body;
 	}
 
 	private List<Statement> ParseBlock()
@@ -228,8 +290,18 @@ internal readonly struct PwrParserP3
 
 	private TypeReference ParseTypeReference()
 	{
+		var m = _tokens.LT(1);
+		if (TryConsume(PwrLexer.META)) {
+			return new MetaTypeReference(GetPosition(m), _tokens.LA(1) == PwrLexer.IDENTIFIER ? ParseTypeReference() : null);
+		}
 		var id = Expect(PwrLexer.IDENTIFIER);
-		TypeReference result = new SimpleTypeReference(GetPosition(id), id.Text);
+		var typeName = id.Text;
+		while (_tokens.LA(1) == PwrLexer.DOT && _tokens.LA(2) == PwrLexer.IDENTIFIER) {
+			_tokens.Consume();
+			typeName += "." + _tokens.LT(1).Text;
+			_tokens.Consume();
+		}
+		TypeReference result = new SimpleTypeReference(GetPosition(id), typeName);
 		while (_tokens.LA(1) is PwrLexer.IDENTIFIER or PwrLexer.REF or PwrLexer.LBRACK or PwrLexer.QUESTION) {
 			var token = _tokens.LT(1);
 			_tokens.Consume();
@@ -314,9 +386,36 @@ internal readonly struct PwrParserP3
 			PwrLexer.LET => VarUsage.Let,
 			_ => throw new ParseError(GetPosition(token), $"Unknown field declaration type: '{token.Text}'")
 		};
+		var flags = usage == VarUsage.Const ? ParseConstantModifiers() : FunctionFlags.None;
 		VarDeclaration decl = ParseVarDeclaration();
 		var value = TryConsume(PwrLexer.ASSIGN) ? ParseExpression() : null;
-		return new FieldDeclaration(GetPosition(token), decl, value, usage);
+		return new FieldDeclaration(GetPosition(token), decl, value, usage) { Flags = flags };
+	}
+
+	private FunctionFlags ParseConstantModifiers()
+	{
+		var flags = FunctionFlags.None;
+		while (_tokens.LT(1) is { Type: PwrLexer.CLASS or PwrLexer.ABSTRACT or PwrLexer.OVERRIDE } token) {
+			var flag = token.Type switch {
+				PwrLexer.ABSTRACT => FunctionFlags.Abstract,
+				PwrLexer.OVERRIDE => FunctionFlags.Override,
+				_ => FunctionFlags.ClassScope,
+			};
+			if (flags.HasFlag(flag)) {
+				throw new ParseError(GetPosition(token), $"The modifier '{token.Text}' appears more than once.");
+			}
+			flags |= flag;
+			_tokens.Consume();
+		}
+		if (flags != FunctionFlags.None && !flags.HasFlag(FunctionFlags.ClassScope)) {
+			throw new ParseError(GetPosition(_tokens.LT(1)),
+				"'abstract' and 'override' on a constant need 'class': write `const class abstract Name` or `const class override Name`.");
+		}
+		if (flags.HasFlag(FunctionFlags.Abstract | FunctionFlags.Override)) {
+			throw new ParseError(GetPosition(_tokens.LT(1)), "A class virtual constant cannot be marked as both 'abstract' and 'override'.");
+		}
+
+		return flags;
 	}
 
 	private VarDeclarationStatement ParseVarDeclarationStatement()
@@ -390,12 +489,15 @@ internal readonly struct PwrParserP3
 			PwrLexer.IF => ParseTernaryExpression(),
 			PwrLexer.LPAREN => ParseParenExpression(),
 			PwrLexer.MATCH => ParseMatchExpression(),
+			PwrLexer.META => ParseMetaExpression(),
 			PwrLexer.NEW => ParseNewExpression(),
 			PwrLexer.NIL => ParseNilLiteral(),
 			PwrLexer.NUMBER => ParseNumber(),
 			PwrLexer.PLUS or PwrLexer.MINUS or PwrLexer.INC or PwrLexer.DEC => ParseUnaryExpression(),
 			PwrLexer.REF => ParseRefExpression(),
 			PwrLexer.SELF => ParseSelfLiteral(),
+			PwrLexer.SUPER => ParseSuperCallExpression(),
+			PwrLexer.TRUE or PwrLexer.FALSE => ParseBoolLiteral(),
 			_ => throw new ParseError(GetPosition(_tokens.LT(1)), $"Unexpected expression value: '{_tokens.LT(1).Text}'")
 		};
 		while (true) {
@@ -420,6 +522,13 @@ internal readonly struct PwrParserP3
 					return result;
 			};
 		}
+	}
+
+	private MetaclassExpression ParseMetaExpression()
+	{
+		var type = (MetaTypeReference)ParseTypeReference();
+		return new MetaclassExpression(type.BaseType
+			?? throw new ParseError(type.Position, "'meta' as a value needs a class: write `meta T`. (Bare `meta` is a type.)"));
 	}
 
 	private CastExpression ParseCastExpression()
@@ -708,6 +817,13 @@ internal readonly struct PwrParserP3
 				: int.Parse(token.Text));
 	}
 
+	private BooleanLiteralExpression ParseBoolLiteral()
+	{
+		var token = _tokens.LT(1);
+		_tokens.Consume();
+		return new BooleanLiteralExpression(GetPosition(token), token.Type == PwrLexer.TRUE);
+	}
+
 	private NilLiteralExpression ParseNilLiteral()
 	{
 		var token = _tokens.LT(1);
@@ -720,6 +836,17 @@ internal readonly struct PwrParserP3
 		var token = _tokens.LT(1);
 		_tokens.Consume();
 		return new SelfLiteralExpression(GetPosition(token));
+	}
+
+	private SuperCallExpression ParseSuperCallExpression()
+	{
+		var token = _tokens.LT(1);
+		_tokens.Consume();
+		var id = Expect(PwrLexer.IDENTIFIER);
+		var name = new Identifier(GetPosition(id), id.Text);
+		Expect(PwrLexer.LPAREN);
+		var args = ParseCommaList(ParseArgument, PwrLexer.RPAREN);
+		return new SuperCallExpression(GetPosition(token), name, args);
 	}
 
 	private Position GetPosition(IToken token) => new(_filename, token.Line, token.Column);
@@ -742,6 +869,16 @@ internal readonly struct PwrParserP3
 		}
 		_tokens.Consume();
 		return result;
+	}
+
+	private int? TryConsumeAny(params Span<int> types)
+	{
+		var result = _tokens.LT(1);
+		if (!types.Contains(result.Type)) {
+			return null;
+		}
+		_tokens.Consume();
+		return result.Type;
 	}
 
 	private bool TryConsume(int type)

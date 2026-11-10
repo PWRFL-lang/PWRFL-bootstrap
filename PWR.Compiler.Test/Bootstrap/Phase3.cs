@@ -23,7 +23,7 @@ internal class Phase3
 		Directory.CreateDirectory(_tempFolder);
 		var filename = Directory.EnumerateFiles(".\\Code", "pwr*.pwrfl").OrderByDescending(f => f).First();
 		var memManager = Directory.EnumerateFiles(".\\Code", "mem*.pwrfl").OrderByDescending(f => f).First();
-		string[] inputs = [filename, memManager];
+		string[] inputs = [filename, memManager, typeof(PwrCompilerP3).Assembly.Location];
 		var latestChange = inputs.Max(File.GetLastWriteTime);
 		var runtimeFilename = Path.Combine(_tempFolder, "pwr.dll");
 		if (latestChange > File.GetLastWriteTime(runtimeFilename)) {
@@ -57,7 +57,10 @@ internal class Phase3
 
 		var process = Process.Start(new ProcessStartInfo(filename)
 			{ RedirectStandardOutput = true, UseShellExecute = false })!;
-		process.WaitForExit();
+		if (!process.WaitForExit(TimeSpan.FromSeconds(5))) {
+			process.Kill();
+			Assert.Fail("Timeout running test");
+		}
 		Assert.That(process.ExitCode, Is.EqualTo(0));
 		var result = process.StandardOutput.ReadToEnd();
 		Assert.That(result, Is.EqualTo(expected));

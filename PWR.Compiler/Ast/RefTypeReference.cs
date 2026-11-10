@@ -4,8 +4,10 @@ public class RefTypeReference(TypeReference baseType) : TypeReference(baseType.P
 {
 	public TypeReference BaseType { get; } = baseType;
 
-	public override NodeType Type => NodeType.RefTypeReference;
+	public override NodeType NodeType => NodeType.RefTypeReference;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitRefTypeReference(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitRefTypeReference(this);
+
+	public override string ToString() => BaseType.ToString() + " ref";
 }

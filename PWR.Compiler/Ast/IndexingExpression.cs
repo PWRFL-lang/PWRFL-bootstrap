@@ -10,7 +10,7 @@ public class IndexingExpression(Expression expr, Expression[] indices) : Express
 	public Expression Expr { get; } = expr;
 	public Expression[] Indices { get; } = [.. indices];
 
-	public override NodeType Type => NodeType.IndexingExpression;
+	public override NodeType NodeType => NodeType.IndexingExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitIndexingExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitIndexingExpression(this);

@@ -6,7 +6,9 @@ public class FieldDeclaration(Position pos, VarDeclaration decl, Expression? val
 	public Expression? Value { get; } = value;
 	public VarUsage VarType { get; } = varType;
 
-	public override NodeType Type => NodeType.VarDeclarationStatement;
+	public FunctionFlags Flags { get; init; }
+
+	public override NodeType NodeType => NodeType.VarDeclarationStatement;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitFieldDeclaration(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitFieldDeclaration(this);

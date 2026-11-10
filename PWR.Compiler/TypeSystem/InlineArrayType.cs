@@ -4,9 +4,9 @@ namespace PWR.Compiler.TypeSystem;
 
 public class InlineArrayType(IType baseType, Expression size) : IType, ICollectionType
 {
-	public IType BaseType { get; } = baseType;
+	public IType ElementType { get; } = baseType;
 	public Expression Size { get; } = size;
 
-	public string Name => $"{BaseType}[{Size}]";
+	public string Name => $"{ElementType}[{Size}]";
 	public override string ToString() => Name;
 }

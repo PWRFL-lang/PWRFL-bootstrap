@@ -7,6 +7,7 @@ public interface ITransformer
 	Node? VisitAnnotation(Annotation node);
 	Node? VisitModuleDeclaration(ModuleDeclaration node);
 	Node? VisitStructDeclaration(StructDeclaration node);
+	Node? VisitClassDeclaration(ClassDeclaration classDeclaration);
 	Node? VisitFieldDeclaration(FieldDeclaration node);
 	Node? VisitFunctionDeclaration(FunctionDeclaration node);
 	Node? VisitParameterDeclaration(ParameterDeclaration node);
@@ -17,6 +18,8 @@ public interface ITransformer
 	Node? VisitRefTypeReference(RefTypeReference node);
 	Node? VisitNilableTypeReference(NilableTypeReference node); 
 	Node? VisitSequenceTypeReference(SequenceTypeReference node);
+	Node? VisitMetaTypeReference(MetaTypeReference node);
+	Node? VisitMetaclassExpression(MetaclassExpression node);
 	Node? VisitAssignStatement(AssignStatement node);
 	Node? VisitIfStatement(IfStatement node);
 	Node? VisitForStatement(ForStatement node);
@@ -43,6 +46,8 @@ public interface ITransformer
 	Node? VisitCharLiteralExpression(CharLiteralExpression node);
 	Node? VisitStringLiteralExpression(StringLiteralExpression node);
 	Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node);
+	Node? VisitBooleanLiteralExpression(BooleanLiteralExpression node);
 	Node? VisitNilLiteralExpression(NilLiteralExpression node);
 	Node? VisitSelfLiteralExpression(SelfLiteralExpression node);
+	Node? VisitSuperCallExpression(SuperCallExpression node);
 }

@@ -7,7 +7,7 @@ public class SimpleLowering : TransformerCompileStep
 	public override Node? VisitExpressionStatement(ExpressionStatement node)
 	{
 		var expr = VisitExpression(node.Expr)!;
-		switch (expr.Type) {
+		switch (expr.NodeType) {
 			case NodeType.ArithmeticExpression:
 				var ae = (ArithmeticExpression)expr;
 				if (ae.IsAssign) {

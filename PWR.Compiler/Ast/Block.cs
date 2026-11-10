@@ -15,7 +15,7 @@ public class Block(Statement[] body) : Statement(body[0].Position), IScope
 
 	public Block With(Statement[] body) => new(body) { SymbolTable = SymbolTable };
 
-	public override NodeType Type => NodeType.Block;
+	public override NodeType NodeType => NodeType.Block;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitBlock(this);
 

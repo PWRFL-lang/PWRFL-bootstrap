@@ -43,7 +43,7 @@ public class AssignStatement(Expression l, Expression r, AssignOperator op) : St
 	public Expression Right { get; } = r;
 	public AssignOperator Op { get; } = op;
 
-	public override NodeType Type => NodeType.AssignStatement;
+	public override NodeType NodeType => NodeType.AssignStatement;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitAssignStatement(this);
 

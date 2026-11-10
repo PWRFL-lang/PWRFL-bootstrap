@@ -12,7 +12,7 @@ public class FunctionCallExpression(Expression target, Expression[] args) : Expr
 
 	public Expression Target { get; } = target;
 	public Expression[] Args { get; internal set; } = args;
-	public override NodeType Type => NodeType.FunctionCall;
+	public override NodeType NodeType => NodeType.FunctionCall;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitFunctionCallExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitFunctionCallExpression(this);

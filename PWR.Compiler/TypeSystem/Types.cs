@@ -27,6 +27,7 @@ public static class Types
 		NilableType.ClearCache();
 		RefType.ClearCache();
 		SpanType.ClearCache();
+		MetaclassType.ClearCache();
 	}
 
 	public static IType Void { get; private set; } = null!;
@@ -65,6 +66,12 @@ public static class Types
 			}
 		}
 		if (l is RefType lr && r == lr.BaseType) {
+			return true;
+		}
+		if (l is PointerType && r == Nil) {
+			return true;
+		}
+		if (r.CanAssignTo(l)) {
 			return true;
 		}
 		return false;

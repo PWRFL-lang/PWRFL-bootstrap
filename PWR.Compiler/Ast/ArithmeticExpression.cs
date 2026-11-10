@@ -25,7 +25,7 @@ public class ArithmeticExpression(Expression l, Expression r, ArithmeticOperator
 	public Expression Right { get; } = r;
 	public ArithmeticOperator Operator { get; } = op;
 
-	public override NodeType Type => NodeType.ArithmeticExpression;
+	public override NodeType NodeType => NodeType.ArithmeticExpression;
 
 	public bool IsAssign => Operator == ArithmeticOperator.Assign || Operator >= ArithmeticOperator.InPlaceAdd;
 

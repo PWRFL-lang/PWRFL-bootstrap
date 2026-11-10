@@ -2,7 +2,7 @@
 
 public class NilLiteralExpression(Position pos) : LiteralExpression(pos)
 {
-	public override NodeType Type => NodeType.NilLiteralExpression;
+	public override NodeType NodeType => NodeType.NilLiteralExpression;
 
 	public override object LiteralValue => null!;
 

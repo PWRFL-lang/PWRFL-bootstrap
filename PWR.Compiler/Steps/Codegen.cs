@@ -201,8 +201,8 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 
 	private LLVMTypeRef LookupType(IType type) => type switch {
 		PrimitiveType pt => pt.Type,
-		SpanType st => BuildSpanType(LookupType(st.BaseType), st.BaseType.Name),
-		TypeSystem.ArrayType at => BuildSpanType(LookupType(at.BaseType), at.BaseType.Name),
+		SpanType st => BuildSpanType(LookupType(st.ElementType), st.ElementType.Name),
+		TypeSystem.ArrayType at => BuildSpanType(LookupType(at.ElementType), at.ElementType.Name),
 		InternalPrimitiveType => LLVMTypeRef.CreatePointer(_builtinTypes[type.Name], 0),
 		_ => throw new NotImplementedException()
 	};
@@ -475,8 +475,8 @@ public unsafe partial class Codegen(LLVMContext context, LLVMModuleRef module, I
 		Debug.Assert(_values.Count == count + 1);
 		var expr = _values.Pop();
 		var (span, elType) = node.Expr.Semantic!.Type switch {
-			SpanType st => (_builder.Handle.BuildExtractValue(expr, 0, "spanPtr"), LookupType(st.BaseType)),
-			TypeSystem.ArrayType at => (_builder.Handle.BuildExtractValue(expr, 0, "spanPtr"), LookupType(at.BaseType)),
+			SpanType st => (_builder.Handle.BuildExtractValue(expr, 0, "spanPtr"), LookupType(st.ElementType)),
+			TypeSystem.ArrayType at => (_builder.Handle.BuildExtractValue(expr, 0, "spanPtr"), LookupType(at.ElementType)),
 			_ => throw new UnreachableException(),
 		};
 

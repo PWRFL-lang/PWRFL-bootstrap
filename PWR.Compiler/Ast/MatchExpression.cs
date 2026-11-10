@@ -11,7 +11,7 @@ public class MatchExpression(Position pos, Expression value, MatchCaseExpression
 	public Expression Value { get; } = value;
 	public MatchCaseExpression[] Cases { get; } = cases;
 
-	public override NodeType Type => NodeType.MatchExpression;
+	public override NodeType NodeType => NodeType.MatchExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitMatchExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitMatchExpression(this);

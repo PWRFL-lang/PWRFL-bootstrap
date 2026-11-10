@@ -17,6 +17,7 @@ internal class LValueVisitor(
 	Dictionary<string, LLVMValueRef> locals, 
 	Dictionary<string, LLVMValueRef> globals,
 	Func<IType, LLVMTypeRef> lookupType,
+	Func<IType, LLVMTypeRef> lookupCompositeType,
 	Func<LLVMValueRef> currentFunc,
 	Func<bool> isCtor) : IVisitor
 {
@@ -59,7 +60,7 @@ internal class LValueVisitor(
 			case ParamDef:
 			case VariableDecl:
 				var ptr = locals[node.Semantic.Name];
-				if (node.Parent.Type == NodeType.MemberIdentifier) {
+				if (node.Parent.NodeType == NodeType.MemberIdentifier) {
 					values.Push(IsRef(node.Semantic.Type) 
 						? builder.BuildLoad2(lookupType(node.Semantic.Type), ptr, "lVar_" + node.Semantic.Name)
 						: ptr);
@@ -75,6 +76,11 @@ internal class LValueVisitor(
 				var parent = values.Pop();
 				VisitFieldDecl(fd, parent);
 				break;
+			case ExternalField { Parent: IClassType } ef:
+				parent = values.Pop();
+				// The base class is the first element of a class's layout, so its own fields come after it.
+				values.Push(builder.BuildStructGEP2(lookupCompositeType(ef.Parent), parent, (uint)ef.Index + 1, $"{parent.Name}.{ef.Name}_gep"));
+				break;
 			default:
 				throw new CompileError(node, "Unknown Identifier semantic type");
 		}
@@ -83,7 +89,10 @@ internal class LValueVisitor(
 	private void VisitFieldDecl(FieldDecl fd, LLVMValueRef parent)
 	{
 		if (parent.TypeOf.Kind == LLVMTypeKind.LLVMPointerTypeKind) {
-			var gep = builder.BuildStructGEP2(lookupType(((IMemberSemantic)fd).ParentType), parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}_gep");
+			// Class layouts have the Object base nested as field 0, so every declared
+			// field's own index is shifted over by one slot.
+			var index = (uint)fd.Index + (fd.ParentType is ClassDeclaration ? 1u : 0u);
+			var gep = builder.BuildStructGEP2(lookupCompositeType(((IMemberSemantic)fd).ParentType), parent, index, $"{parent.Name}.{fd.Name}_gep");
 			values.Push(gep);
 		} else {
 			values.Push(builder.BuildExtractValue(parent, (uint)fd.Index, $"{parent.Name}.{fd.Name}"));
@@ -92,7 +101,7 @@ internal class LValueVisitor(
 
 	private static bool IsRef(IType type) => type switch {
 		NilableType nt => IsRef(nt.BaseType),
-		RefType or PointerType => true,
+		RefType or PointerType or IClassType => true,
 		_ => false
 	};
 
@@ -109,8 +118,8 @@ internal class LValueVisitor(
 		Debug.Assert(values.Count == count + 1);
 		var expr = values.Pop();
 		var (span, elType) = node.Expr.Semantic!.Type switch {
-			SpanType st => (builder.BuildExtractValue(expr, 0, "spanPtr"), lookupType(st.BaseType)),
-			TypeSystem.ArrayType at => (builder.BuildExtractValue(expr, 0, "spanPtr"), lookupType(at.BaseType)),
+			SpanType st => (builder.BuildExtractValue(expr, 0, "spanPtr"), lookupType(st.ElementType)),
+			TypeSystem.ArrayType at => (builder.BuildExtractValue(expr, 0, "spanPtr"), lookupType(at.ElementType)),
 			_ => throw new UnreachableException(),
 		};
 
@@ -125,13 +134,13 @@ internal class LValueVisitor(
 
 	private void VisitInlineArrayIndexing(IndexingExpression node, InlineArrayType ia)
 	{
-		var elType = lookupType(ia.BaseType);
+		var elType = lookupType(ia.ElementType);
 		var sem = node.Expr.Semantic;
 		if (sem is VariableDecl vd) {
 			var expr = locals[vd.Name];
 			VisitIndexing(expr, elType, node.Indices[0]);
 		} else if (sem is FieldDecl fd) {
-			Debug.Assert(node.Expr.Type == NodeType.MemberIdentifier);
+			Debug.Assert(node.Expr.NodeType == NodeType.MemberIdentifier);
 			VisitFieldFlatIndexing((MemberIdentifier)node.Expr, fd, node.Indices[0]);
 		} else { 
 			throw new NotImplementedException();
@@ -173,6 +182,9 @@ internal class LValueVisitor(
 	public void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 		=> values.Push(LLVMValueRef.CreateConstInt(module.Context.Int32Type, (ulong)node.Value));
 
+	public void VisitBooleanLiteralExpression(BooleanLiteralExpression node)
+		=> values.Push(LLVMValueRef.CreateConstInt(module.Context.Int1Type, (ulong)(node.Value ? 1 : 0)));
+
 	public void VisitMatchCaseExpression(MatchCaseExpression node) => throw new NotImplementedException();
 
 	public void VisitMatchExpression(MatchExpression node) => throw new NotImplementedException();
@@ -213,9 +225,15 @@ internal class LValueVisitor(
 
 	public void VisitSpanTypeReference(SpanTypeReference node) => throw new NotImplementedException();
 
+	public void VisitMetaTypeReference(MetaTypeReference node) => throw new NotImplementedException();
+
+	public void VisitMetaclassExpression(MetaclassExpression node) => throw new NotImplementedException();
+
 	public void VisitStringLiteralExpression(StringLiteralExpression node) => throw new NotImplementedException();
 
 	public void VisitStructDeclaration(StructDeclaration node) => throw new NotImplementedException();
+
+	public void VisitClassDeclaration(ClassDeclaration node) => throw new NotImplementedException();
 
 	public void VisitTernaryExpression(TernaryExpression node) => throw new NotImplementedException();
 
@@ -228,4 +246,6 @@ internal class LValueVisitor(
 	public void VisitWhileStatement(WhileStatement node) => throw new NotImplementedException();
 
 	public void VisitSelfLiteralExpression(SelfLiteralExpression node) => values.Push(isCtor() ? locals["self"] : currentFunc().FirstParam);
+
+	public void VisitSuperCallExpression(SuperCallExpression node) => throw new NotImplementedException();
 }

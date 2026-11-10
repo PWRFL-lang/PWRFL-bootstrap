@@ -7,7 +7,7 @@ public abstract class Node(Position position)
 {
 	public Position Position { get; } = position;
 	public Node Parent { get; set; } = null!;
-	public abstract NodeType Type { get; }
+	public abstract NodeType NodeType { get; }
 	public abstract void Accept(IVisitor visitor);
 	public abstract Node? Accept(ITransformer visitor);
 

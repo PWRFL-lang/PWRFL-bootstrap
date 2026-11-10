@@ -5,7 +5,7 @@ public class ArrayTypeReference(TypeReference baseType, Expression? size) : Type
 	public TypeReference BaseType { get; } = baseType;
 	public Expression? Size { get; } = size;
 
-	public override NodeType Type => NodeType.ArrayTypeReference;
+	public override NodeType NodeType => NodeType.ArrayTypeReference;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitArrayTypeReference(this);
 

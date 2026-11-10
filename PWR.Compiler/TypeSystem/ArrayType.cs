@@ -7,13 +7,13 @@ namespace PWR.Compiler.TypeSystem;
 
 public class ArrayType : IType, ICollectionType
 {
-	public IType BaseType { get; }
+	public IType ElementType { get; }
 
-	public string Name => BaseType.Name + " array";
+	public string Name => ElementType.Name + " array";
 
-	private ArrayType(IType baseType)
+	private ArrayType(IType elementType)
 	{
-		BaseType = baseType;
+		ElementType = elementType;
 		_members = new() { 
 			{ "Length",
 				new MagicProperty(
@@ -33,6 +33,14 @@ public class ArrayType : IType, ICollectionType
 							new (default, "length"),
 							new SimpleTypeReference(default, "int") { Semantic = new TypeRef(Types.Int32) })
 					]
+				)
+			},
+			{
+				"ToPtr",
+				new MagicFunction(
+					"ToPtr",
+					"arr$ToPtr",
+					new SimpleTypeReference(default, "ptr") { Semantic = new TypeRef(Types.Ptr) }
 				)
 			}
 		};

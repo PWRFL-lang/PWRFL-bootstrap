@@ -79,13 +79,25 @@ public class BaseTransformer : ITransformer
 		return node.With(annotations, name, body);
 	}
 
+	public virtual Node? VisitClassDeclaration(ClassDeclaration node)
+	{
+		var annotations = Visit(node.Annotations) ?? [];
+		var name = (Identifier)VisitIdentifier(node.Name)!;
+		var inherited = Visit(node.Inherited)!;
+		var body = Visit(node.Body)!;
+		if (annotations == node.Annotations && name == node.Name && body == node.Body) {
+			return node;
+		}
+		return node.With(annotations, name, inherited, body);
+	}
+
 	public virtual Node? VisitFieldDeclaration(FieldDeclaration node)
 	{
 		var decl = (VarDeclaration)Visit(node.Decl)!;
 		var value = VisitExpression(node.Value)!;
 		return (decl == node.Decl && value == node.Value)
 			? node
-			: new FieldDeclaration(node.Position, decl, value, node.VarType);
+			: new FieldDeclaration(node.Position, decl, value, node.VarType) { Semantic = node.Semantic, Flags = node.Flags };
 	}
 
 	public virtual Node? VisitAnnotation(Annotation node)
@@ -155,6 +167,21 @@ public class BaseTransformer : ITransformer
 		return typ == node.BaseType ? node : new SpanTypeReference(typ);
 	}
 
+	public virtual Node? VisitMetaTypeReference(MetaTypeReference node)
+	{
+		if (node.BaseType == null) {
+			return node; // bare `meta`
+		}
+		var typ = VisitType(node.BaseType)!;
+		return typ == node.BaseType ? node : new MetaTypeReference(node.Position, typ);
+	}
+
+	public virtual Node? VisitMetaclassExpression(MetaclassExpression node)
+	{
+		var typ = VisitType(node.Type)!;
+		return typ == node.Type ? node : new MetaclassExpression(typ);
+	}
+
 	public virtual Node? VisitRefTypeReference(RefTypeReference node)
 	{
 		var typ = VisitType(node.BaseType)!;
@@ -211,7 +238,7 @@ public class BaseTransformer : ITransformer
 		var value = VisitExpression(node.Value)!;
 		return (decl == node.Decl && value == node.Value)
 			? node
-			: new VarDeclarationStatement(node.Position, decl, value, node.VarType);
+			: new VarDeclarationStatement(node.Position, decl, value, node.VarType) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitReturnStatement(ReturnStatement node)
@@ -244,27 +271,27 @@ public class BaseTransformer : ITransformer
 	{
 		var expr = VisitExpression(node.Expr)!;
 		var indices = Visit(node.Indices) ?? [];
-		return (expr == node.Expr && indices == node.Indices) ? node : new IndexingExpression(expr, indices);
+		return (expr == node.Expr && indices == node.Indices) ? node : new IndexingExpression(expr, indices) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitSliceExpression(SliceExpression node)
 	{
 		var start = VisitExpression(node.Start);
 		var end = VisitExpression(node.End);
-		return (start == node.Start && end == node.End) ? node : new SliceExpression(node.Position, start, end);
+		return (start == node.Start && end == node.End) ? node : new SliceExpression(node.Position, start, end) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitUnaryExpression(UnaryExpression node)
 	{
 		var expr = VisitExpression(node.Expr)!;
-		return expr == node.Expr ? node : new UnaryExpression(node.Position, expr, node.Operator);
+		return expr == node.Expr ? node : new UnaryExpression(node.Position, expr, node.Operator) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitArithmeticExpression(ArithmeticExpression node)
 	{
 		var l = VisitExpression(node.Left)!;
 		var r = VisitExpression(node.Right)!;
-		return (l == node.Left && r == node.Right) ? node : new ArithmeticExpression(l, r, node.Operator);
+		return (l == node.Left && r == node.Right) ? node : new ArithmeticExpression(l, r, node.Operator) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitComparisonExpression(ComparisonExpression node)
@@ -288,41 +315,41 @@ public class BaseTransformer : ITransformer
 	{
 		var value = VisitExpression(node.Value)!;
 		var cases = Visit(node.Cases)!;
-		return value == node.Value && cases == node.Cases ? node : new MatchExpression(node.Position, value, cases);
+		return value == node.Value && cases == node.Cases ? node : new MatchExpression(node.Position, value, cases) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitMatchCaseExpression(MatchCaseExpression node)
 	{
 		var cases = Visit(node.Cases);
 		var value = VisitExpression(node.Value)!;
-		return cases == node.Cases && value == node.Value ? node : new MatchCaseExpression(node.Position, cases, value);
+		return cases == node.Cases && value == node.Value ? node : new MatchCaseExpression(node.Position, cases, value) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitNewArrayExpression(NewArrayExpression node)
 	{
 		var typ = VisitType(node.ArrayType)!;
 		var size = VisitExpression(node.Size)!;
-		return typ == node.ArrayType && node.Size == size ? node : new NewArrayExpression(node.Position, typ, size);
+		return typ == node.ArrayType && node.Size == size ? node : new NewArrayExpression(node.Position, typ, size) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitNewObjExpression(NewObjExpression node)
 	{
 		var typ = VisitType(node.ObjectType)!;
 		var args = Visit(node.Args) ?? [];
-		return typ == node.ObjectType && args == node.Args ? node : new NewObjExpression(node.Position, typ, args);
+		return typ == node.ObjectType && args == node.Args ? node : new NewObjExpression(node.Position, typ, args) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitCastExpression(CastExpression node)
 	{
 		var value = VisitExpression(node.Value)!;
 		var typ = VisitType(node.CastType)!;
-		return value == node.Value && typ == node.CastType ? node : new CastExpression(value, typ);
+		return value == node.Value && typ == node.CastType ? node : new CastExpression(value, typ) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitRefExpression(RefExpression node)
 	{
 		var expr = VisitExpression(node.Expr)!;
-		return expr == node.Expr ? node : new RefExpression(node.Position, expr);
+		return expr == node.Expr ? node : new RefExpression(node.Position, expr) { Semantic = node.Semantic };
 	}
 
 	public virtual Node? VisitIdentifier(Identifier node) => node;
@@ -339,7 +366,15 @@ public class BaseTransformer : ITransformer
 
 	public virtual Node? VisitIntegerLiteralExpression(IntegerLiteralExpression node) => node;
 
+	public virtual Node? VisitBooleanLiteralExpression(BooleanLiteralExpression node) => node;
+
 	public virtual Node? VisitNilLiteralExpression(NilLiteralExpression node) => node;
 
 	public virtual Node? VisitSelfLiteralExpression(SelfLiteralExpression node) => node;
+
+	public virtual Node? VisitSuperCallExpression(SuperCallExpression node)
+	{
+		var args = Visit(node.Args) ?? [];
+		return args == node.Args ? node : node.With(args);
+	}
 }

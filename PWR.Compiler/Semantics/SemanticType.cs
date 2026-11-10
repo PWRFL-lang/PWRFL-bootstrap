@@ -21,6 +21,7 @@ public enum SemanticType : uint
 	Match       = 0x00002000,
 	Indexing    = 0x00004000,
 	Ref         = 0x00008000,
+	Namespace   = 0x00010000,
 
 	EntityMask  = 0x00FFFFFF,
 

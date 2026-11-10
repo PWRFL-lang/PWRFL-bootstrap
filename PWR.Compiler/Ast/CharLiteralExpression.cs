@@ -5,7 +5,7 @@ public class CharLiteralExpression(Position pos, char value) : LiteralExpression
 	public char Value => value;
 	public override object LiteralValue => value;
 
-	public override NodeType Type => NodeType.CharLiteral;
+	public override NodeType NodeType => NodeType.CharLiteral;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitCharLiteralExpression(this);
 

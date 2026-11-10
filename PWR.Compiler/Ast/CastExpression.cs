@@ -8,7 +8,7 @@ public class CastExpression(Position pos, Expression value, TypeReference cast) 
 	public Expression Value { get; } = value;
 	public TypeReference CastType { get; } = cast;
 
-	public override NodeType Type => NodeType.Cast;
+	public override NodeType NodeType => NodeType.Cast;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitCastExpression(this);
 

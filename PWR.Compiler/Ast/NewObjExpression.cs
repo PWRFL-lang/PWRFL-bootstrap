@@ -11,7 +11,7 @@ public class NewObjExpression(Position pos, TypeReference type, Expression[] arg
 	public TypeReference ObjectType { get; } = type;
 	public Expression[] Args { get; } = args;
 
-	public override NodeType Type => NodeType.NewObjExpression;
+	public override NodeType NodeType => NodeType.NewObjExpression;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitNewObjExpression(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitNewObjExpression(this);

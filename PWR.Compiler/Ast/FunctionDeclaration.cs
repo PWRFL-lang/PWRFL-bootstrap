@@ -12,8 +12,12 @@ public enum FunctionFlags
 	None = 0,
 	Virtual = 1,
 	Abstract = 2,
-	Static = 4,
-	TypeScope = 8,
+	Override = 4,
+	Static = 8,
+	TypeScope = 16,
+	// `def class`: a class-scope method. Its `self` is the class's metaclass rather than an
+	// instance, and it is always virtual: it sits in the VMT with the other virtual members.
+	ClassScope = 32,
 }
 
 public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier name, ParameterDeclaration[] parameters, TypeReference? returnType, Statement[] body)
@@ -32,7 +36,7 @@ public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier n
 	public FunctionDeclaration With(Identifier name, ParameterDeclaration[] parameters, TypeReference? returnType, Statement[] body)
 		=> new(Position, Flags, name, parameters, returnType, body) { SymbolTable = SymbolTable, Semantic = Semantic, IsConstructor = IsConstructor };
 
-	public override NodeType Type => NodeType.FunctionDeclaration;
+	public override NodeType NodeType => NodeType.FunctionDeclaration;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitFunctionDeclaration(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitFunctionDeclaration(this);
@@ -55,4 +59,6 @@ public class FunctionDeclaration(Position pos, FunctionFlags flags, Identifier n
 	}
 
 	void IScope.Add(ISemantic semantic) => SymbolTable.Add(semantic);
+
+	public override string ToString() => $"def {Name}({string.Join(", ", Parameters)})";
 }

@@ -7,9 +7,9 @@ namespace PWR.Compiler.TypeSystem;
 
 public class SpanType : IType, ICollectionType
 {
-	public IType BaseType { get; }
+	public IType ElementType { get; }
 
-	public string Name => BaseType.Name + " span";
+	public string Name => ElementType.Name + " span";
 
 	private readonly Dictionary<string, ISemantic> _members = new() {
 		{ "Length",
@@ -28,7 +28,7 @@ public class SpanType : IType, ICollectionType
 		}
 	};
 
-	private SpanType(IType baseType) => BaseType = baseType;
+	private SpanType(IType baseType) => ElementType = baseType;
 
 	ISemantic? IType.GetMember(string name)
 	{

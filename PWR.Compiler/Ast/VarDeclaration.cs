@@ -14,7 +14,7 @@ public class VarDeclaration(Position pos, string name, TypeReference? type) : De
 	public string Name { get; } = name;
 	public TypeReference? VarType { get; } = type;
 
-	public override NodeType Type => NodeType.VarDeclaration;
+	public override NodeType NodeType => NodeType.VarDeclaration;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitVarDeclaration(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitVarDeclaration(this);
@@ -28,7 +28,7 @@ public class VarDeclarationStatement(Position pos, VarDeclaration decl, Expressi
 	public Expression Value { get; } = value;
 	public VarUsage VarType { get; } = varType;
 
-	public override NodeType Type => NodeType.VarDeclarationStatement;
+	public override NodeType NodeType => NodeType.VarDeclarationStatement;
 
 	public ISemantic? Semantic { get; set; }
 

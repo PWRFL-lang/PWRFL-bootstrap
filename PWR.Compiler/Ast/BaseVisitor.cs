@@ -35,6 +35,14 @@ public class BaseVisitor : IVisitor
 		Visit(node.Body);
 	}
 
+	public virtual void VisitClassDeclaration(ClassDeclaration node)
+	{
+		Visit(node.Annotations);
+		Visit(node.Name);
+		Visit(node.Inherited);
+		Visit(node.Body);
+	}
+
 	public virtual void VisitFieldDeclaration(FieldDeclaration node)
 	{
 		Visit(node.Decl);
@@ -76,6 +84,10 @@ public class BaseVisitor : IVisitor
 	public virtual void VisitRefTypeReference(RefTypeReference node) => Visit(node.BaseType);
 
 	public virtual void VisitSequenceTypeReference(SequenceTypeReference node) => Visit(node.BaseType);
+
+	public virtual void VisitMetaTypeReference(MetaTypeReference node) => Visit(node.BaseType);
+
+	public virtual void VisitMetaclassExpression(MetaclassExpression node) => Visit(node.Type);
 
 	public virtual void VisitAssignStatement(AssignStatement node)
 	{
@@ -200,9 +212,17 @@ public class BaseVisitor : IVisitor
 	public virtual void VisitIntegerLiteralExpression(IntegerLiteralExpression node)
 	{ }
 
+	public virtual void VisitBooleanLiteralExpression(BooleanLiteralExpression node)
+	{ }
+
 	public virtual void VisitNilLiteralExpression(NilLiteralExpression node)
 	{ }
 
 	public virtual void VisitSelfLiteralExpression(SelfLiteralExpression node)
 	{ }
+
+	public virtual void VisitSuperCallExpression(SuperCallExpression node)
+	{
+		Visit(node.Args);
+	}
 }

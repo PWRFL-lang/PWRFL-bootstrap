@@ -20,6 +20,9 @@ public class ImplicitConstructor : ISemantic, IFunction
 			new SimpleTypeReference(default, sem.Type.Name) { Semantic = new TypeRef(sem.Type) });
 
 	public string Name => $"{Type.Name}$$iCtor";
+	public string FullName => Name;
+
+	public FunctionFlags Flags => FunctionFlags.None;
 
 	public SemanticType SemanticType => SemanticType.Constructor | SemanticType.Function | SemanticType.Magic;
 

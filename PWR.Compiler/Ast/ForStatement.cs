@@ -18,7 +18,7 @@ public class ForStatement(Position pos, VarDeclaration index, Expression coll, S
 	public ForStatement With(VarDeclaration index, Expression coll, Statement[] body)
 		=> new(this.Position, index, coll, body) { SymbolTable = this.SymbolTable };
 
-	public override NodeType Type => NodeType.ForStatement;
+	public override NodeType NodeType => NodeType.ForStatement;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitForStatement(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitForStatement(this);

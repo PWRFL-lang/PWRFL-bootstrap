@@ -8,6 +8,16 @@ public class AssignParents : VisitorCompileStep
 {
 	private readonly Stack<Node> _parents = [];
 
+	public void Assign(Node node, Node parent)
+	{
+		_parents.Push(parent);
+		try {
+			Visit(node);
+		} finally {
+			_parents.Pop();
+		}
+	}
+
 	public override void Visit(Node? node)
 	{
 		if (node != null) {

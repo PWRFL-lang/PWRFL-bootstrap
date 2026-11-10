@@ -12,6 +12,7 @@ public class MagicFunction(string name, string fullName, TypeReference returnTyp
 
 	public string Name => name;
 	public string FullName => fullName;
+	public FunctionFlags Flags => FunctionFlags.None;
 
 	public SemanticType SemanticType => SemanticType.Magic | SemanticType.Function;
 

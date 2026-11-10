@@ -9,6 +9,7 @@ public enum NodeType
 	IntegerLiteral,
 	FloatLiteral,
 	StringLiteral,
+	BooleanLiteral,
 	FunctionCall,
 	ExpressionStatement,
 	FunctionDeclaration,
@@ -28,6 +29,8 @@ public enum NodeType
 	ForStatement,
 	SliceExpression,
 	SequenceTypeReference,
+	MetaTypeReference,
+	MetaclassExpression,
 	NewArrayExpression,
 	NewObjExpression,
 	ArrayTypeReference,
@@ -46,4 +49,6 @@ public enum NodeType
 	StructDeclaration,
 	SelfLiteral,
 	NilableTypeReference,
+	ClassDeclaration,
+	SuperCallExpression,
 }

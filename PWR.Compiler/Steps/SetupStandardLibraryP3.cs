@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 using PWR.Compiler.Ast;
@@ -56,14 +58,48 @@ public class SetupStandardLibraryP3(string[]? imports, bool skipStdLib, string[]
 				tree.Imports.Add(Import(imp));
 			}
 		}
+		CheckImportsAgree(tree.Imports);
 	}
+
+	private static void CheckImportsAgree(List<ExternalLibrary> imports)
+	{
+		foreach (var library in imports) {
+			foreach (var (name, id) in library.Dependencies) {
+				var actual = imports.FirstOrDefault(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
+				if (actual != null && actual.Id != id) {
+					throw new InvalidOperationException(
+						$"Library '{library.Name}' was built against a different version of '{name}' than the one being imported. Rebuild '{library.Name}'.");
+				}
+			}
+		}
+	}
+
+	private readonly Dictionary<string, ExternalLibrary> _loaded = new(StringComparer.OrdinalIgnoreCase);
 
 	private ExternalLibrary Import(string filename)
 	{
-		var stream = LoadImport(filename, searchPath);
-		using var ctx = new MetadataContext(stream);
 		var name = Path.GetFileNameWithoutExtension(filename);
-		return new ExternalLibrary(ctx, name);
+		if (_loaded.TryGetValue(name, out var already)) {
+			return already;
+		}
+		using var stream = LoadImport(filename, searchPath);
+		using var ctx = new MetadataContext(stream);
+		ctx.ImportResolver = (library, ns, type) => ResolveImportedType(name, library, ns, type);
+		var result = new ExternalLibrary(ctx, name);
+		_loaded.Add(name, result);
+		return result;
+	}
+
+	private IType ResolveImportedType(string requester, string library, string? ns, string typeName)
+	{
+		var target = Import(library + ".dll");
+		var expected = _loaded[requester].Dependencies.FirstOrDefault(d => string.Equals(d.Name, library, StringComparison.OrdinalIgnoreCase));
+		if (expected.Name != null && expected.Id != target.Id) {
+			throw new InvalidOperationException(
+				$"Library '{requester}' was built against a different version of '{library}' than the one being imported. Rebuild '{requester}'.");
+		}
+		return target.Types.Cast<ExternalType>().FirstOrDefault(t => t.Name == typeName && t.Namespace == ns)
+			?? throw new Exception($"Library '{library}' has no type '{ns}.{typeName}', which '{requester}' refers to.");
 	}
 
 	private static FileStream LoadImport(string filename, string[] searchPath)

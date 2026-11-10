@@ -13,7 +13,7 @@ public class IfStatement(Position pos, Expression cond, Statement[] trueBlock, S
 	public Block TrueBlock { get; } = new(trueBlock);
 	public Block? FalseBlock { get; } = falseBlock == null ? null : new(falseBlock);
 
-	public override NodeType Type => NodeType.IfStatement;
+	public override NodeType NodeType => NodeType.IfStatement;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitIfStatement(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitIfStatement(this);

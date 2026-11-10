@@ -2,7 +2,7 @@
 
 public class SelfLiteralExpression(Position pos) : Expression(pos)
 {
-	public override NodeType Type => NodeType.SelfLiteral;
+	public override NodeType NodeType => NodeType.SelfLiteral;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitSelfLiteralExpression(this);
 

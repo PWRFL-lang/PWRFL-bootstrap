@@ -37,28 +37,35 @@ ASSIGN : '=';
 
 ABSTRACT : 'abstract';
 CAST : 'cast';
+CLASS : 'class';
 CONST : 'const';
 CONSTRUCTOR : 'constructor';
 ELIF : 'elif';
 ELSE : 'else';
 END : 'end';
 EXTENDS : 'extends';
+FALSE : 'false';
 FOR : 'for';
 FUNCTION : 'def';
 IF : 'if';
 IN : 'in';
 LET : 'let';
 MATCH : 'match';
+META : 'meta';
 MODULE : 'module';
 NAMESPACE : 'namespace';
 NEW : 'new';
 NIL : 'nil';
+OVERRIDE : 'override';
 REF : 'ref';
 RETURN : 'return';
 SELF : 'self';
 STRUCT : 'struct';
+SUPER : 'super';
 THEN : 'then';
+TRUE : 'true';
 VAR : 'var';
+VIRTUAL : 'virtual';
 WHILE : 'while';
 
 CHAR_LITERAL

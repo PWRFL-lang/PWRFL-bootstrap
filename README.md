@@ -33,6 +33,8 @@ At the completion of each phase other than the first, (because this repo was not
   * Add default parameter support
   * With a working allocator, implement dynamic data types
     * Dynamic arrays
-    * Collections
     * Classes
-    * Interfaces
+* Phase 5 (planned):
+  * Interfaces
+  * Generics
+  * Collections

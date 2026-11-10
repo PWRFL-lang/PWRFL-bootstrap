@@ -1,0 +1,12 @@
+struct Metaclass
+	ParentClass: Metaclass ref?
+	InstanceSize: long
+	ClassName: string
+end
+
+def NewObject(cls: Metaclass ref): byte span
+	var bytes = Memory.Alloc(cls.InstanceSize)
+	var mc = cast bytes: Metaclass ref span
+	mc[0] = cls
+	return bytes
+end

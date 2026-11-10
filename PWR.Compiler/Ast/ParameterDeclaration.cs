@@ -6,8 +6,12 @@ public class ParameterDeclaration(Identifier name, TypeReference type, Expressio
 	public TypeReference ParamType { get; } = type;
 	public Expression? DefaultValue { get; } = defaultValue;
 
-	public override NodeType Type => NodeType.ParameterDeclaration;
+	public override NodeType NodeType => NodeType.ParameterDeclaration;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitParameterDeclaration(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitParameterDeclaration(this);
+
+	public override string ToString() => DefaultValue == null 
+		? $"{Name} : {ParamType}" 
+		: $"{Name} : {ParamType} = {DefaultValue}";
 }

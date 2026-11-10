@@ -52,6 +52,9 @@ public class CompilePipelineP3
 			</ArrayItems>
 		</Expand>
 	</Type>
+	<Type Name="Object">
+		<DisplayString>{{ class {((char**)metaclass)[2],[((int*)metaclass)[6]]s8} }}</DisplayString>
+	</Type>
 </AutoVisualizer>
 """;
 
@@ -62,8 +65,9 @@ public class CompilePipelineP3
 		_module = context.Handle.CreateModuleWithName("name");
 		_steps = [new AssignParents(), new SetupStandardLibraryP3(options.Imports, options.NoStdLib, options.SearchPath),
 			new SimpleLowering(),
-			new BindNamespaces(name), new BindTypes(), new BindMembers(), new LowerForLoops(), new BindExpressionsP3(),
-			new AddTypeConversions(), new InsertImplicitSelf(),
+			new BindNamespaces(name), new BindTypes(), new BindParentTypes(), new BindMembers(), new InsertImplicitConstructors(), new AssignVmtSlots(),
+			new LowerForLoops(), new BindExpressionsP3(), new AddTypeConversions(), new InsertImplicitSelf(),
+			new CheckConstructors(), new CheckMembers(),
 			new BuildMetadata(name), new CodegenP3(context, _module, name, options.ProjectType == ProjectType.Library, options.DebugInfo)];
 		Types.Populate(context);
 		LLVM.InitializeX86TargetInfo();
@@ -78,6 +82,9 @@ public class CompilePipelineP3
 		foreach (var step in _steps) {
 			tree = step.Run(tree);
 		}
+		if (_options.EmitLlvmIr) {
+			File.WriteAllText(_options.OutputFilename + ".ll", _module.PrintToString());
+		}
 		_module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 		return tree;
 	}
@@ -90,14 +97,12 @@ public class CompilePipelineP3
 		} catch (Exception ex) {
 			return new ErrorCompileResult(ex.Message, sw);
 		}
+		_module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 		return BuildResult(tree, sw);
 	}
 
 	private CompileResult BuildResult(Project tree, Stopwatch sw)
 	{
-		if (_options.EmitLlvmIr) {
-			File.WriteAllText(_options.OutputFilename + ".ll", _module.PrintToString());
-		}
 		if (_options.CompileType == CompileType.Jit) {
 			LLVM.LinkInMCJIT();
 			var engine = _module.CreateExecutionEngine();
@@ -108,10 +113,10 @@ public class CompilePipelineP3
 			var machine = target.CreateTargetMachine(triple, "generic", "",
 				LLVMCodeGenOptLevel.LLVMCodeGenLevelDefault, LLVMRelocMode.LLVMRelocDefault, LLVMCodeModel.LLVMCodeModelDefault);
 			var filename = _options.OutputFilename;
-			var bareFilename = Path.GetFileNameWithoutExtension(filename);
-			if (filename == bareFilename) {
+			if (Path.GetExtension(filename) == "") {
 				filename += _options.ProjectType == ProjectType.Executable ? ".exe" : ".dll";
 			}
+			var bareFilename = Path.Combine(Path.GetDirectoryName(filename) ?? "", Path.GetFileNameWithoutExtension(filename));
 
 			machine.EmitToFile(_module, bareFilename + ".obj", LLVMCodeGenFileType.LLVMObjectFile);
 			var args = $"{bareFilename}.obj /out:{filename}";
@@ -124,6 +129,12 @@ public class CompilePipelineP3
 				args += " /nodefaultlib";
 			} else {
 				args += " /defaultlib:pwr";
+			}
+			foreach (var import in _options.Imports ?? []) {
+				args += $" /defaultlib:{Path.GetFileNameWithoutExtension(import)}";
+			}
+			foreach (var path in _options.SearchPath) {
+				args += $" /libpath:\"{path}\"";
 			}
 			if (_options.DebugInfo) {
 				args += " /debug";

@@ -4,7 +4,7 @@ public class SpanTypeReference(TypeReference baseType) : TypeReference(baseType.
 {
 	public TypeReference BaseType { get; } = baseType;
 
-	public override NodeType Type => NodeType.SpanTypeReference;
+	public override NodeType NodeType => NodeType.SpanTypeReference;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitSpanTypeReference(this);
 	public override Node? Accept(ITransformer visitor) => visitor.VisitSpanTypeReference(this);

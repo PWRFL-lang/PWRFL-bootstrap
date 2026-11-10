@@ -18,7 +18,7 @@ public class ModuleDeclaration(Position pos, Identifier name, Declaration[] body
 			Semantic = Semantic,
 		};
 
-	public override NodeType Type => NodeType.ModuleDeclaration;
+	public override NodeType NodeType => NodeType.ModuleDeclaration;
 
 	public override void Accept(IVisitor visitor) => visitor.VisitModuleDeclaration(this);
 

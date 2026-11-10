@@ -131,6 +131,20 @@ module BoolMethods extends bool
 	end
 end
 
+module StringMethods extends string
+	def Concat(l: string, r: string): string
+		let len = l.Length + r.Length
+		var buffer = new char[len]
+		memcpy(buffer.ToPtr(), StrToPtr(l), l.Length)
+		memcpy(buffer[l.Length ..].ToPtr(), StrToPtr(r), r.Length)
+		return new string(buffer)
+	end
+
+	def ToString(self: string): string
+		return self
+	end	
+end
+
 def _DllMainCRTStartup(instance: ptr, reason: int, reserved: ptr): int
 	return 1
 end

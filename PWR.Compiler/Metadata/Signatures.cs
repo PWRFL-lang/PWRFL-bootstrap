@@ -37,7 +37,10 @@ internal enum SigElement : byte
 	Sequence = 24,
 	Box = 25,
 	Meta = 26,        // metaclass
-	Reserved2 = 27,
+	Nilable = 27,     // a type that may also be nil
+	FixedArray = 28,  // inline array, followed by the element type, then the length (7-bit encoded)
+	AnyMeta = 29,     // bare `meta`: the metaclass of any class. Nothing follows it.
+	Reserved2 = 30,
 	
 	// composite types, followed by a type token
 	Module = 40,
@@ -138,6 +141,22 @@ internal static class Signatures
 			case PointerType:
 				writer.Write((byte)SigElement.Ptr);
 				break;
+			case MetaclassType { IsAny: true }:
+				writer.Write((byte)SigElement.AnyMeta);
+				break;
+			case MetaclassType mt:
+				writer.Write((byte)SigElement.Meta);
+				WriteType(mt.Class, ref writer, context);
+				break;
+			case NilableType nt:
+				writer.Write((byte)SigElement.Nilable);
+				WriteType(nt.BaseType, ref writer, context);
+				break;
+			case InlineArrayType ia:
+				writer.Write((byte)SigElement.FixedArray);
+				WriteType(ia.ElementType, ref writer, context);
+				writer.Write7BitEncodedInt(FixedArrayLength(ia));
+				break;
 			case ICollectionType ct:
 				WriteCollectionType(ct, ref writer, context);
 				break;
@@ -146,7 +165,7 @@ internal static class Signatures
 				WriteType(rt.BaseType, ref writer, context);
 				break;
 			case ICompositeType ct2:
-				writer.Write((byte)SigElement.Struct);
+				writer.Write((byte)(ct2 is IClassType ? SigElement.Class : SigElement.Struct));
 				writer.Write(context.LookupType(ct2).AsInt);
 				break;
 			default:
@@ -169,6 +188,11 @@ internal static class Signatures
 		writer.Write((byte)tag);
 	}
 
+	private static int FixedArrayLength(InlineArrayType ia)
+		=> ia.Size is IntegerLiteralExpression il
+			? il.Value
+			: throw new CompileError(ia.Size, "Fixed-size array must have a constant integer size");
+
 	private static void WriteCollectionType(ICollectionType ct, ref SpanWriter writer, MetadataContext context)
 	{
 		var tag = ct switch {
@@ -178,10 +202,10 @@ internal static class Signatures
 			_ => throw new NotImplementedException(),
 		};
 		writer.Write((byte)tag);
-		WriteType(ct.BaseType, ref writer, context);
+		WriteType(ct.ElementType, ref writer, context);
 	}
 
-	internal static byte[] WriteConstant(Expression value)
+	internal static byte[] WriteConstant(Expression value, MetadataContext? context = null)
 	{
 		using var ms = new MemoryStream();
 		using var bw = new BinaryWriter(ms);
@@ -197,6 +221,14 @@ internal static class Signatures
 			case StringLiteralExpression sl:
 				bw.Write((byte)SigElement.String);
 				bw.Write(sl.Value);
+				break;
+			case BooleanLiteralExpression bl:
+				bw.Write((byte)SigElement.Bool);
+				bw.Write(bl.Value);
+				break;
+			case MetaclassExpression me when context != null:
+				bw.Write((byte)SigElement.Meta);
+				bw.Write(context.LookupType((IClassType)me.Type.Semantic!.Type).AsInt);
 				break;
 			case NilLiteralExpression:
 				bw.Write((byte)SigElement.Ptr);
@@ -241,10 +273,18 @@ internal static class Signatures
 			SigElement.Bool => Types.Bool,
 			SigElement.I8 => Types.Byte,
 			SigElement.I32 => Types.Int32,
+			SigElement.I64 => Types.Int64,
 			SigElement.Char => Types.Char,
 			SigElement.Ptr => Types.Ptr,
 			SigElement.String => Types.String,
 			SigElement.Ref => RefType.Create(ReadType(ref sr, context)),
+			SigElement.Nilable => NilableType.Create(ReadType(ref sr, context)),
+			SigElement.AnyMeta => MetaclassType.Any,
+			SigElement.Meta => ReadType(ref sr, context) is IClassType cls
+				? MetaclassType.Create(cls)
+				: throw new Exception("Invalid metadata: a metaclass type must refer to a class."),
+			SigElement.FixedArray => ReadFixedArray(ref sr, context),
+			SigElement.Struct or SigElement.Class => context.ResolveType(sr.ReadInt32()),
 			SigElement.Array => ArrayType.Create(ReadType(ref sr, context)),
 			SigElement.Span => SpanType.Create(ReadType(ref sr, context)),
 			SigElement.Sequence => new SequenceType(ReadType(ref sr, context)),
@@ -252,7 +292,25 @@ internal static class Signatures
 		};
 	}
 
-	internal static LiteralExpression ReadConstant(Span<byte> data)
+	private static InlineArrayType ReadFixedArray(ref SpanReader sr, MetadataContext context)
+	{
+		var element = ReadType(ref sr, context);
+		var length = sr.Read7BitEncodedInt();
+		return new InlineArrayType(element, new IntegerLiteralExpression(default, length) { Semantic = new TypeRef(Types.Int32) });
+	}
+
+	private static MetaclassExpression ReadMetaclassConstant(ref SpanReader sr, MetadataContext? context)
+	{
+		var token = sr.ReadInt32();
+		if (context?.ResolveType(token) is not IClassType cls) {
+			throw new Exception("Invalid metadata: a metaclass constant must refer to a class.");
+		}
+		var expression = new MetaclassExpression(new SimpleTypeReference(default, cls.Name) { Semantic = new TypeRef(cls) });
+		expression.Semantic = new MetaclassLiteral(expression, MetaclassType.Create(cls));
+		return expression;
+	}
+
+	internal static Expression ReadConstant(Span<byte> data, MetadataContext? context = null)
 	{
 		var sr = new SpanReader(data);
 		var typ = (SigElement)sr.ReadByte();
@@ -261,7 +319,9 @@ internal static class Signatures
 			SigElement.I32 => new IntegerLiteralExpression(default, sr.ReadInt32()) { Semantic = new TypeRef(Types.Int32) },
 			SigElement.Char => new CharLiteralExpression(default, sr.ReadChar()) { Semantic = new TypeRef(Types.Char) },
 			SigElement.String => new StringLiteralExpression(default, sr.ReadString()) { Semantic = new TypeRef(Types.String) },
+			SigElement.Bool => new BooleanLiteralExpression(default, sr.ReadBoolean()) { Semantic = new TypeRef(Types.Bool) },
 			SigElement.Ptr => new NilLiteralExpression(default) { Semantic = new TypeRef(Types.Nil) },
+			SigElement.Meta => ReadMetaclassConstant(ref sr, context),
 			_ => throw new NotImplementedException($"Unsupported constant type: {typ}")
 		};
 	}

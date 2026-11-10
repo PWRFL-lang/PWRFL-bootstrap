@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using PWR.Compiler.Ast;
 using PWR.Compiler.Semantics;
@@ -21,6 +22,18 @@ public abstract class ScopeSensitiveCompileStep : VisitorCompileStep
 			}
 		}
 		return result;
+	}
+
+	protected List<ISemantic> LookupType(string name)
+	{
+		var dot = name.LastIndexOf('.');
+		if (dot < 0) {
+			return Lookup(name, SemanticType.Type);
+		}
+		var simpleName = name[(dot + 1)..];
+		return _scopes.LastOrDefault() is Project project
+			? [.. project.TypesIn(name[..dot]).Where(t => t.Name == simpleName)]
+			: [];
 	}
 
 	protected List<ISemantic> Scan(Func<ISemantic, bool> predicate, SemanticType type)
@@ -71,6 +84,16 @@ public abstract class ScopeSensitiveCompileStep : VisitorCompileStep
 			base.VisitStructDeclaration(node);
 		} finally {
 			_scopes.Pop(); 
+		}
+	}
+
+	public override void VisitClassDeclaration(ClassDeclaration node)
+	{
+		_scopes.Push(node);
+		try {
+			base.VisitClassDeclaration(node);
+		} finally {
+			_scopes.Pop();
 		}
 	}
 

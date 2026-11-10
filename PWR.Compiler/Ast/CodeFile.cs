@@ -17,7 +17,7 @@ public class CodeFile(string filename, string? @namespace, Declaration[] decls, 
 
 	public Declaration[] Decls { get; } = decls;
 	public Statement[] Body { get; } = body;
-	public override NodeType Type => NodeType.CodeFile;
+	public override NodeType NodeType => NodeType.CodeFile;
 
 	public string? Namespace { get; internal set; } = @namespace;
 

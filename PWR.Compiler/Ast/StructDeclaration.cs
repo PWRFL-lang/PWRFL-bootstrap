@@ -19,7 +19,7 @@ public class StructDeclaration(Position pos, Identifier name, Declaration[] body
 			Semantic = Semantic,
 		};
 
-	public override NodeType Type => NodeType.StructDeclaration;
+	public override NodeType NodeType => NodeType.StructDeclaration;
 
 	public int FieldCount => SymbolTable.OfType<FieldDecl>().Where(f => !f.IsStatic).Count();
 

@@ -3,7 +3,7 @@
 // placeholder type to get things bootstrapped. Will be removed once generics are implemented
 internal class SequenceType(IType baseType) : IType, ICollectionType
 {
-	public IType BaseType => baseType;
+	public IType ElementType => baseType;
 
-	public string Name => BaseType.Name + " seq";
+	public string Name => ElementType.Name + " seq";
 }

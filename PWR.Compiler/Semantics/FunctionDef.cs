@@ -15,6 +15,8 @@ public class FunctionDef(FunctionDeclaration decl, bool hasSelf, ISemantic? owne
 	public virtual IType Type => Decl.ReturnType?.Semantic?.Type ?? Types.Void;
 	public bool HasSelf { get; } = hasSelf;
 
+	public FunctionFlags Flags => Decl.Flags;
+
 	TypeReference? IFunction.ReturnType => Decl.ReturnType;
 
 	ParameterDeclaration[] IFunction.Args => Decl.Parameters;

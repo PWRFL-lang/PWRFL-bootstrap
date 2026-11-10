@@ -10,6 +10,10 @@
 	</PropertyGroup>
 	
 	<ItemGroup>
+		<InternalsVisibleTo Include="PWR.Compiler.Test" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Remove="Parser\PwrLexer.g4" />
 	</ItemGroup>
 
