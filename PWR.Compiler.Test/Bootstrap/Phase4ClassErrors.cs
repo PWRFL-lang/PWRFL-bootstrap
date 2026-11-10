@@ -154,7 +154,7 @@ internal class Phase4ClassErrors : Phase4
 			end
 		end
 		""",
-		"Class 'Square' is not abstract, but does not implement the abstract member 'Area' of 'Shape'");
+		"Class 'Square' is not abstract, but does not implement the abstract member 'Shape.Area'");
 
 	[Test]
 	public void ClassAbstractMetaclassExpressionIsError() => RunError("""
@@ -166,7 +166,7 @@ internal class Phase4ClassErrors : Phase4
 
 		var m = meta Shape
 		""",
-		"Cannot take the metaclass of 'Shape': it is abstract");
+		"Cannot take the metaclass of abstract class 'Shape'");
 
 	[Test]
 	public void ClassAbstractCannotBeConstructed() => RunError("""
@@ -178,7 +178,7 @@ internal class Phase4ClassErrors : Phase4
 
 		var s = Shape.Create()
 		""",
-		"Cannot construct 'Shape': it is abstract");
+		"Cannot construct abstract class 'Shape'");
 
 	[Test]
 	public void ClassAbstractClassScopeMethodThroughClassName() => RunError("""

@@ -275,7 +275,7 @@ internal class Phase4ClassConstants : Phase4
 			const class B: int = A * 2
 		end
 		""",
-		"has to be known to the compiler");
+		"must be constant");
 
 	[Test]
 	public void ClassConstantNeedsValue() => RunError("""
@@ -299,7 +299,7 @@ internal class Phase4ClassConstants : Phase4
 			const class A: int = "four"
 		end
 		""",
-		"cannot be the value of the constant 'A'");
+		"cannot be the value of the constant 'A: int'");
 
 	[Test]
 	public void ClassAbstractConstantCannotHaveValue() => RunError("""
@@ -307,7 +307,7 @@ internal class Phase4ClassConstants : Phase4
 			const class abstract Id: int = 5
 		end
 		""",
-		"'Id' is abstract, so it can't have a value");
+		"Abstract member 'Id' can't have a value");
 
 	[Test]
 	public void ClassAbstractConstantNeedsAnAbstractClass() => RunError("""
@@ -326,7 +326,7 @@ internal class Phase4ClassConstants : Phase4
 		class Echo extends Plugin
 		end
 		""",
-		"Class 'Echo' is not abstract, but does not implement the abstract member 'Id' of 'Plugin'");
+		"Class 'Echo' is not abstract, but does not implement the abstract member 'Plugin.Id'");
 
 	[Test]
 	public void ClassAbstractConstantThroughClassName() => RunError("""

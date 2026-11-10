@@ -10,9 +10,9 @@ internal enum FieldFlags : ushort
 
 	// virtual class-scope constants, which live in a VMT slot.
 	VirtualConstant = 2,
-	Abstract = 3,
-	Override = 4,
-	StorageMask = 7
+	Abstract = 4,
+	Override = 8,
+	StorageMask = 15
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]

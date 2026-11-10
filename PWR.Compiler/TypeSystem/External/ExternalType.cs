@@ -55,7 +55,7 @@ internal abstract class ExternalType(string? ns, string name, IType? parent, Met
 			}
 		}
 
-		idx = _context.MethodDefinitionTable.BinarySearchFirst(f => (int)f.OwnerRef, _rowIdx);
+		idx = _context.MethodDefinitionTable.BinarySearchFirst(f => f.OwnerRef, _rowIdx);
 		if (idx >= 0) {
 			for (int i = idx; i < _context.MethodDefinitionTable.Count; ++i) {
 				var field = _context.MethodDefinitionTable[i];

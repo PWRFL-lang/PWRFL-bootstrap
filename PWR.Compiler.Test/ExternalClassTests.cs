@@ -434,6 +434,9 @@ internal class ExternalClassTests
 				constructor override Create()
 					super Create()
 				end
+
+				const class override Sides = 12
+				const class override Id = 6
 			end
 
 			module Setup
@@ -462,6 +465,8 @@ internal class ExternalClassTests
 					; Should be multiplied by sqrt(3)/4, or approximately 0.433, but that's not supported yet
 				end
 
+				const class override Default = meta Triangle
+				const class override Sides = 3
 				const class override Id = 3
 			end
 
@@ -546,6 +551,9 @@ internal class ExternalClassTests
 				constructor override Create()
 					super Create()
 				end
+
+				const class override Sides = 12
+				const class override Id = 6
 			end
 
 			var c = Cube.Create()
@@ -557,7 +565,7 @@ internal class ExternalClassTests
 			print c.Sides.ToString()
 			""");
 
-		Assert.That(output, Is.EqualTo("a shape\n3\n16\nsquare\n4\n"));
+		Assert.That(output, Is.EqualTo("a shape\n3\n16\nsquare\n12\n"));
 	}
 
 	[Test]
@@ -573,7 +581,7 @@ internal class ExternalClassTests
 			print c.Id.ToString()
 			""", "shapes.dll", "cubelib.dll");
 
-		Assert.That(output, Is.EqualTo("a shape\n3\n10\n7\n"));
+		Assert.That(output, Is.EqualTo("a shape\n3\n10\n6\n"));
 	}
 
 	[Test]
@@ -584,6 +592,9 @@ internal class ExternalClassTests
 				constructor override Create()
 					super Create()
 				end
+
+				const class override Sides = 12
+				const class override Id = 6
 			end
 
 			class Tesseract extends Cube
@@ -602,7 +613,7 @@ internal class ExternalClassTests
 			print Tesseract.Sides.ToString()
 			""");
 
-		Assert.That(output, Is.EqualTo("9\n7\nsquare\n36\n"));
+		Assert.That(output, Is.EqualTo("9\n6\nsquare\n36\n"));
 	}
 
 	[Test]
@@ -650,7 +661,8 @@ internal class ExternalClassTests
 				super Create()
 			end
 
-			const class override Sides = 3
+			const class override Sides = 12
+			const class override Id = 6
 
 			def override Area(): int
 				return Side * 2
@@ -680,7 +692,7 @@ internal class ExternalClassTests
 			print s.Id.ToString()
 			""", "shapes.dll", "cubelib.dll");
 
-		Assert.That(output, Is.EqualTo("6\n3\nsquare\n6\n7\n"));
+		Assert.That(output, Is.EqualTo("6\n12\nsquare\n6\n6\n"));
 	}
 
 	[Test]
@@ -692,6 +704,9 @@ internal class ExternalClassTests
 				constructor override Create()
 					super Create()
 				end
+
+				const class override Sides = 12
+				const class override Id = 6
 			end
 
 			var c = Cube2.Create()
@@ -703,7 +718,7 @@ internal class ExternalClassTests
 			print Cube2.Default.Kind()
 			""", "cubelib.dll");
 
-		Assert.That(output, Is.EqualTo("6\nsquare\n3\n7\nshape\n"));
+		Assert.That(output, Is.EqualTo("6\nsquare\n12\n6\nshape\n"));
 	}
 
 	const int HEADER_SIZE = 32; // the parent, the size, the name's address and its length		
@@ -780,7 +795,7 @@ internal class ExternalClassTests
 	public void ExternalAbstractClassIsStillAbstract() => AssertCompileError("""
 		var s = Shape.Create()
 		""",
-		"Cannot construct 'Shape': it is abstract");
+		"Cannot construct abstract class 'Shape'");
 
 	[Test]
 	public void ExternalAbstractConstantThroughClassNameIsRefused() => AssertCompileError("""
